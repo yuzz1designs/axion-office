@@ -1,0 +1,598 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { 
+  Database, 
+  Search, 
+  RefreshCw, 
+  Download, 
+  Plus, 
+  Filter, 
+  FileSpreadsheet, 
+  ArrowUpDown, 
+  CheckCircle2, 
+  AlertCircle, 
+  Clock, 
+  ExternalLink,
+  ChevronRight,
+  SlidersHorizontal,
+  TableProperties,
+  ArrowLeft,
+  X,
+  Sparkles,
+  Layers,
+  Building,
+  Tag
+} from "lucide-react";
+import { AccentColorOption } from "../../types/settings";
+
+interface DatabaseScreenProps {
+  accentColor?: AccentColorOption;
+  onBackToOverview?: () => void;
+}
+
+interface DataRecord {
+  id: string;
+  code: string;
+  name: string;
+  category: "Equipamentos" | "Infraestruturas" | "Manutenção" | "Licenças & Software" | "Fornecedores";
+  location: string;
+  owner: string;
+  status: "Ativo" | "Em Manutenção" | "Pendente" | "Revisão Necessária";
+  cost: string;
+  lastSync: string;
+}
+
+const INITIAL_RECORDS: DataRecord[] = [
+  {
+    id: "rec-001",
+    code: "EQ-8902",
+    name: "Servidor Principal Axion Core Vault 01",
+    category: "Infraestruturas",
+    location: "Piso -1 • Datacenter Vault",
+    owner: "Nelson Afonso",
+    status: "Ativo",
+    cost: "€ 48.500,00",
+    lastSync: "Hoje, 17:45"
+  },
+  {
+    id: "rec-002",
+    code: "CL-2204",
+    name: "Sistema Chiller HVAC Inverter Central",
+    category: "Equipamentos",
+    location: "Cobertura • Bloco Técnico A",
+    owner: "Carlos Mendes (Facilities)",
+    status: "Ativo",
+    cost: "€ 32.200,00",
+    lastSync: "Hoje, 17:40"
+  },
+  {
+    id: "rec-003",
+    code: "BC-1099",
+    name: "Rede de Beacons Ultrabroadband (32 nós)",
+    category: "Infraestruturas",
+    location: "Pisos 1, 2, 3 • Zonas A e B",
+    owner: "Nelson Afonso",
+    status: "Ativo",
+    cost: "€ 14.800,00",
+    lastSync: "Hoje, 16:15"
+  },
+  {
+    id: "rec-004",
+    code: "MN-4491",
+    name: "Calibração de Sensores de CO2 e VOC",
+    category: "Manutenção",
+    location: "Sala de Reunião VIP • Piso 3",
+    owner: "Equipa IoT",
+    status: "Pendente",
+    cost: "€ 1.450,00",
+    lastSync: "Hoje, 14:02"
+  },
+  {
+    id: "rec-005",
+    code: "SW-7712",
+    name: "Licenciamento Anual FIDO2 Passkey Enterprise",
+    category: "Licenças & Software",
+    location: "Cloud Enterprise",
+    owner: "Segurança de Sistemas",
+    status: "Ativo",
+    cost: "€ 9.800,00",
+    lastSync: "Ontem, 19:30"
+  },
+  {
+    id: "rec-006",
+    code: "FN-3021",
+    name: "Contrato de Fornecimento de Energia 100% Verde",
+    category: "Fornecedores",
+    location: "Edifício AXION HQ",
+    owner: "Direção de Operações",
+    status: "Ativo",
+    cost: "€ 78.000,00 / ano",
+    lastSync: "28 Ago, 11:20"
+  },
+  {
+    id: "rec-007",
+    code: "EQ-4410",
+    name: "Painéis de Controlo Tátil Crestron 10″",
+    category: "Equipamentos",
+    location: "Salas de Conferência A e B",
+    owner: "Suporte AV",
+    status: "Revisão Necessária",
+    cost: "€ 8.600,00",
+    lastSync: "27 Ago, 15:00"
+  },
+  {
+    id: "rec-008",
+    code: "MN-4498",
+    name: "Manutenção Preventiva de UPS e Gerador",
+    category: "Manutenção",
+    location: "Subsolo • Sala Elétrica",
+    owner: "Eng.ª Eletrotécnica",
+    status: "Ativo",
+    cost: "€ 5.200,00",
+    lastSync: "25 Ago, 09:15"
+  }
+];
+
+const CATEGORIES = [
+  "Todas as Categorias",
+  "Equipamentos",
+  "Infraestruturas",
+  "Manutenção",
+  "Licenças & Software",
+  "Fornecedores"
+];
+
+export default function DatabaseScreen({
+  accentColor = {
+    id: "axion-blue",
+    name: "AXION Blue",
+    hex: "#00f0ff",
+    secondary: "#0284c7",
+    glow: "rgba(0, 240, 255, 0.4)"
+  },
+  onBackToOverview
+}: DatabaseScreenProps) {
+  const [records, setRecords] = useState<DataRecord[]>(INITIAL_RECORDS);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Todas as Categorias");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState("Agora mesmo");
+  const [selectedRecord, setSelectedRecord] = useState<DataRecord | null>(null);
+  const [isNewRecordModalOpen, setIsNewRecordModalOpen] = useState(false);
+
+  // New Record Form State
+  const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newCategory, setNewCategory] = useState<DataRecord["category"]>("Equipamentos");
+  const [newLocation, setNewLocation] = useState("");
+  const [newOwner, setNewOwner] = useState("Nelson Afonso");
+  const [newCost, setNewCost] = useState("");
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setLastSyncTime("Agora mesmo");
+    }, 1200);
+  };
+
+  const handleAddRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+
+    const record: DataRecord = {
+      id: `rec-${Date.now()}`,
+      code: newCode || `AX-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: newName,
+      category: newCategory,
+      location: newLocation || "Edifício AXION HQ",
+      owner: newOwner || "Nelson Afonso",
+      status: "Ativo",
+      cost: newCost ? `€ ${newCost}` : "€ 0,00",
+      lastSync: "Agora mesmo"
+    };
+
+    setRecords([record, ...records]);
+    setIsNewRecordModalOpen(false);
+    setNewCode("");
+    setNewName("");
+    setNewLocation("");
+    setNewCost("");
+  };
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((rec) => {
+      const matchesSearch = 
+        rec.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        rec.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        rec.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        rec.owner.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = 
+        selectedCategory === "Todas as Categorias" || rec.category === selectedCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [records, searchQuery, selectedCategory]);
+
+  return (
+    <div className="w-full max-w-6xl mx-auto flex flex-col py-6 pb-28 relative z-10 select-none">
+      
+      {/* ================= TOP EDITORIAL HEADER ================= */}
+      <div className="flex flex-col gap-6 pb-6 border-b border-white/10">
+        
+        {/* Top toolbar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {onBackToOverview && (
+              <button
+                type="button"
+                onClick={onBackToOverview}
+                className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-2 text-xs font-sans"
+              >
+                <ArrowLeft size={16} />
+                <span className="hidden sm:inline">Voltar ao Painel</span>
+              </button>
+            )}
+            <span className="text-[11px] font-mono tracking-widest text-white/40 uppercase">
+              AXION // LIVE DATABASE & EXCEL DATA HUB
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
+            >
+              <RefreshCw size={13} className={isSyncing ? "animate-spin text-[#00f0ff]" : "text-white/60"} />
+              <span>{isSyncing ? "A sincronizar..." : "Sincronizar Excel"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsNewRecordModalOpen(true)}
+              style={{
+                backgroundColor: accentColor.hex,
+                color: "#050609",
+                boxShadow: `0 0 20px ${accentColor.glow}`
+              }}
+              className="px-4 py-2 rounded-xl font-bold text-xs font-sans transition-all cursor-pointer hover:brightness-110 flex items-center gap-2"
+            >
+              <Plus size={15} />
+              <span>Novo Registo</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Title, Excel Connector info & metrics */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2">
+          
+          <motion.div 
+            initial={{ opacity: 0, x: -28 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col gap-1.5"
+          >
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-sans font-bold text-white tracking-tight uppercase">
+                BASE DE DADOS, <span className="text-white/70 font-normal">EXCEL DATA SYNC</span>
+              </h1>
+              
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                CONEXÃO EXCEL ATIVA
+              </span>
+
+              <span className="text-[10px] font-mono text-white/40 border border-white/10 px-2 py-0.5 rounded-full">
+                MS GRAPH API // SHAREPOINT
+              </span>
+            </div>
+
+            <p className="text-xs md:text-sm text-white/70 font-sans flex items-center gap-2 flex-wrap">
+              <FileSpreadsheet size={14} className="text-emerald-400 shrink-0" />
+              <span className="font-mono text-white/90">Livro_Operacional_AXION_2026.xlsx</span>
+              <span className="text-white/30">•</span>
+              <span className="text-white/50">Última sincronização: {lastSyncTime}</span>
+              <span className="text-white/30">•</span>
+              <span className="text-white/50">{records.length} registos ativos</span>
+            </p>
+          </motion.div>
+
+          {/* Quick Stats */}
+          <div className="flex items-center gap-6 shrink-0 border-l border-white/10 pl-6 hidden lg:flex">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-mono text-white/40 uppercase">Total Registos</span>
+              <span className="text-xl font-bold text-white font-sans">{records.length}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-mono text-white/40 uppercase">Integridade</span>
+              <span className="text-xl font-bold text-emerald-400 font-sans">100%</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-mono text-white/40 uppercase">Latência Sync</span>
+              <span className="text-xl font-bold text-white/80 font-mono">180ms</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* ================= SEARCH & CATEGORIES TOOLBAR ================= */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4 border-b border-white/10">
+        
+        {/* Search input */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+          <input
+            type="text"
+            placeholder="Pesquisar por código, designação, local ou responsável..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[#00f0ff] transition-colors"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Category selector */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {CATEGORIES.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-sans whitespace-nowrap transition-all cursor-pointer ${
+                  isSelected
+                    ? "bg-white/15 text-white font-semibold border border-white/20"
+                    : "text-white/50 hover:text-white hover:bg-white/[0.03]"
+                }`}
+                style={{
+                  color: isSelected ? "#ffffff" : undefined
+                }}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+
+      </div>
+
+      {/* ================= DATA GRID (CLEAN SPREADSHEET VIEW) ================= */}
+      <div className="flex flex-col pt-2">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-white/10 text-[10px] font-mono text-white/40 uppercase tracking-wider">
+                <th className="py-3 px-3 font-semibold">Cód. / Ref</th>
+                <th className="py-3 px-3 font-semibold">Designação do Registo</th>
+                <th className="py-3 px-3 font-semibold">Categoria</th>
+                <th className="py-3 px-3 font-semibold">Localização</th>
+                <th className="py-3 px-3 font-semibold">Responsável</th>
+                <th className="py-3 px-3 font-semibold">Estado</th>
+                <th className="py-3 px-3 font-semibold text-right">Valor / Custo</th>
+                <th className="py-3 px-3 font-semibold text-right">Sincronizado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 font-sans text-xs">
+              {filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-white/40 text-xs">
+                    Nenhum registo encontrado para os filtros selecionados.
+                  </td>
+                </tr>
+              ) : (
+                filteredRecords.map((rec) => {
+                  const isSelected = selectedRecord?.id === rec.id;
+                  return (
+                    <tr
+                      key={rec.id}
+                      onClick={() => setSelectedRecord(rec)}
+                      className={`hover:bg-white/[0.03] transition-colors cursor-pointer group ${
+                        isSelected ? "bg-white/[0.05]" : ""
+                      }`}
+                    >
+                      {/* Code */}
+                      <td className="py-3 px-3 font-mono text-[11px] font-semibold" style={{ color: accentColor.hex }}>
+                        {rec.code}
+                      </td>
+
+                      {/* Name */}
+                      <td className="py-3 px-3 font-medium text-white group-hover:text-[#00f0ff] transition-colors">
+                        {rec.name}
+                      </td>
+
+                      {/* Category */}
+                      <td className="py-3 px-3 text-white/60">
+                        <span className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/5 text-[11px]">
+                          {rec.category}
+                        </span>
+                      </td>
+
+                      {/* Location */}
+                      <td className="py-3 px-3 text-white/50 text-[11px]">
+                        {rec.location}
+                      </td>
+
+                      {/* Owner */}
+                      <td className="py-3 px-3 text-white/70 text-[11px]">
+                        {rec.owner}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
+                          rec.status === "Ativo" 
+                            ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20" 
+                            : rec.status === "Pendente" 
+                            ? "text-amber-400 bg-amber-400/10 border-amber-400/20" 
+                            : "text-cyan-400 bg-cyan-400/10 border-cyan-400/20"
+                        }`}>
+                          {rec.status}
+                        </span>
+                      </td>
+
+                      {/* Cost */}
+                      <td className="py-3 px-3 font-mono text-white/80 text-right text-[11px]">
+                        {rec.cost}
+                      </td>
+
+                      {/* Last Sync */}
+                      <td className="py-3 px-3 font-mono text-white/40 text-right text-[10px]">
+                        {rec.lastSync}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer info strip */}
+        <div className="flex items-center justify-between pt-4 border-t border-white/10 text-xs text-white/40">
+          <div className="flex items-center gap-2">
+            <span>A mostrar {filteredRecords.length} de {records.length} registos da folha Excel</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono text-white/30">FORMATO: XLSX / CSV AUTO-SYNC</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= NEW RECORD MODAL ================= */}
+      <AnimatePresence>
+        {isNewRecordModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-[#0c1017] border border-white/15 rounded-3xl p-6 shadow-2xl flex flex-col gap-5"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <TableProperties size={18} style={{ color: accentColor.hex }} />
+                  <h3 className="text-base font-bold text-white font-sans tracking-tight uppercase">
+                    NOVO REGISTO, <span className="text-white/70 font-normal">LIVRO OPERACIONAL</span>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsNewRecordModalOpen(false)}
+                  className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/5"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddRecord} className="flex flex-col gap-4 text-xs font-sans">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white/80 font-medium">Código / Referência</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: EQ-9940"
+                      value={newCode}
+                      onChange={(e) => setNewCode(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[#00f0ff]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white/80 font-medium">Categoria</label>
+                    <select
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value as any)}
+                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                    >
+                      <option value="Equipamentos">Equipamentos</option>
+                      <option value="Infraestruturas">Infraestruturas</option>
+                      <option value="Manutenção">Manutenção</option>
+                      <option value="Licenças & Software">Licenças & Software</option>
+                      <option value="Fornecedores">Fornecedores</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-white/80 font-medium">Designação do Registo *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Novo Sensor de Presença Ótico"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white/80 font-medium">Localização no Edifício</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Piso 2 • Sala de Formação"
+                      value={newLocation}
+                      onChange={(e) => setNewLocation(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-white/80 font-medium">Custo Estimado (€)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 2.450,00"
+                      value={newCost}
+                      onChange={(e) => setNewCost(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[#00f0ff]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewRecordModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-white/60 hover:text-white text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: accentColor.hex,
+                      color: "#050609"
+                    }}
+                    className="px-5 py-2 rounded-xl font-bold text-xs hover:brightness-110 transition-all cursor-pointer"
+                  >
+                    Gravar e Sincronizar
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+}
