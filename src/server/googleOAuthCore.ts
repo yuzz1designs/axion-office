@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+export const GOOGLE_OAUTH_SCOPES = ["openid", "email", GOOGLE_DRIVE_SCOPE] as const;
 
 export interface OAuthGrant {
   refreshToken: string;
@@ -41,7 +42,7 @@ export function buildGoogleAuthorizationUrl({ clientId, redirectUri, state }: { 
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: GOOGLE_DRIVE_SCOPE,
+    scope: GOOGLE_OAUTH_SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
     state,

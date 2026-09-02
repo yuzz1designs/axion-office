@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GOOGLE_DRIVE_SCOPE, OAuthStateStore, buildGoogleAuthorizationUrl, toPublicOAuthStatus, type OAuthGrant } from "./googleOAuthCore";
+import { GOOGLE_DRIVE_SCOPE, GOOGLE_OAUTH_SCOPES, OAuthStateStore, buildGoogleAuthorizationUrl, toPublicOAuthStatus, type OAuthGrant } from "./googleOAuthCore";
 
 test("consome state válido uma única vez", () => {
   const states = new OAuthStateStore(() => 1_000);
@@ -27,7 +27,7 @@ test("constrói consentimento offline com scope Drive e callback exato", () => {
   assert.equal(url.origin + url.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
   assert.equal(url.searchParams.get("client_id"), "client-id");
   assert.equal(url.searchParams.get("redirect_uri"), "http://localhost:3000/api/google/oauth/callback");
-  assert.equal(url.searchParams.get("scope"), GOOGLE_DRIVE_SCOPE);
+  assert.equal(url.searchParams.get("scope"), GOOGLE_OAUTH_SCOPES.join(" "));
   assert.equal(url.searchParams.get("access_type"), "offline");
   assert.equal(url.searchParams.get("prompt"), "consent");
   assert.equal(url.searchParams.get("state"), "secure-state");
