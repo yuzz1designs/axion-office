@@ -1,31 +1,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
+import {
+  companyToRow,
+  createNextCompanyId,
+  findCompanySheetRow,
+  findFirstEmptySheetRow,
+  rowToCompany,
+  type CrmCompany,
+} from "./crmCompany";
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID || "1YauPqJGJonmCE28DwpqWchO-SV2IffzQ1ORc7KtH54k";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const MAX_BODY_BYTES = 64_000;
-
-export interface CrmCompany {
-  id: string;
-  company: string;
-  website: string;
-  sector: string;
-  country: string;
-  city: string;
-  source: string;
-  idealFit: string;
-  priority: string;
-  owner: string;
-  leadStatus: string;
-  createdAt: string;
-  lastContact: string;
-  nextAction: string;
-  serviceInterest: string;
-  estimatedMonthlyValue: string;
-  notes: string;
-}
 
 type ServiceAccount = { client_email: string; private_key: string };
 
@@ -87,22 +75,6 @@ async function getAccessToken(credentials: ServiceAccount) {
   return result.access_token;
 }
 
-function rowToCompany(row: unknown[]): CrmCompany {
-  const values = Array.from({ length: 17 }, (_, index) => String(row[index] ?? ""));
-  return {
-    id: values[0], company: values[1], website: values[2], sector: values[3], country: values[4],
-    city: values[5], source: values[6], idealFit: values[7], priority: values[8], owner: values[9],
-    leadStatus: values[10], createdAt: values[11], lastContact: values[12], nextAction: values[13],
-    serviceInterest: values[14], estimatedMonthlyValue: values[15], notes: values[16],
-  };
-}
-
-function companyToRow(company: CrmCompany) {
-  return [company.id, company.company, company.website, company.sector, company.country, company.city,
-    company.source, company.idealFit, company.priority, company.owner, company.leadStatus, company.createdAt,
-    company.lastContact, company.nextAction, company.serviceInterest, company.estimatedMonthlyValue, company.notes];
-}
-
 async function sheetsRequest(path: string, init: RequestInit = {}) {
   const credentials = getServiceAccount();
   if (!credentials) throw new Error("GOOGLE_SHEETS_NOT_CONFIGURED");
@@ -116,9 +88,13 @@ async function sheetsRequest(path: string, init: RequestInit = {}) {
   return result;
 }
 
+async function getCompanyRows() {
+  const result = await sheetsRequest(`/values/${encodeURIComponent("Empresas!A2:Q")}`) as { values?: unknown[][] };
+  return result.values || [];
+}
+
 async function listCompanies() {
-  const result = await sheetsRequest(`/values/${encodeURIComponent("Empresas!A2:Q501")}`) as { values?: unknown[][] };
-  return (result.values || []).map(rowToCompany).filter((company) => company.id || company.company);
+  return (await getCompanyRows()).map(rowToCompany).filter((company) => company.id || company.company);
 }
 
 export async function handleGoogleSheetsApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
@@ -136,22 +112,24 @@ export async function handleGoogleSheetsApi(req: IncomingMessage, res: ServerRes
     if (url.pathname === "/api/crm/companies" && req.method === "POST") {
       const company = await readJson(req) as CrmCompany;
       if (!company.company?.trim()) return sendJson(res, 400, { error: "O nome da empresa é obrigatório." });
-      const companies = await listCompanies();
-      company.id ||= `CP-${String(companies.length + 1).padStart(3, "0")}`;
-      await sheetsRequest(`/values/${encodeURIComponent("Empresas!A:Q")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
-        method: "POST", body: JSON.stringify({ values: [companyToRow(company)] }),
-      });
+      const rows = await getCompanyRows();
+      const companies = rows.map(rowToCompany).filter((item) => item.id || item.company);
+      company.id ||= createNextCompanyId(companies.map((item) => item.id));
+      const sheetRow = findFirstEmptySheetRow(rows);
+      const writeResult = await sheetsRequest(`/values/${encodeURIComponent(`Empresas!A${sheetRow}:Q${sheetRow}`)}?valueInputOption=USER_ENTERED&includeValuesInResponse=true`, {
+        method: "PUT", body: JSON.stringify({ values: [companyToRow(company)] }),
+      }) as { updatedRows?: number };
+      if (writeResult.updatedRows !== 1) throw new Error("GOOGLE_SHEETS_WRITE_NOT_CONFIRMED");
       return sendJson(res, 201, { company });
     }
     const match = url.pathname.match(/^\/api\/crm\/companies\/([^/]+)$/);
     if (match && req.method === "PUT") {
       const id = decodeURIComponent(match[1]);
       const company = await readJson(req) as CrmCompany;
-      const companies = await listCompanies();
-      const rowIndex = companies.findIndex((item) => item.id === id);
-      if (rowIndex < 0) return sendJson(res, 404, { error: "Empresa não encontrada." });
+      const rows = await getCompanyRows();
+      const sheetRow = findCompanySheetRow(rows, id);
+      if (sheetRow === null) return sendJson(res, 404, { error: "Empresa não encontrada." });
       company.id = id;
-      const sheetRow = rowIndex + 2;
       await sheetsRequest(`/values/${encodeURIComponent(`Empresas!A${sheetRow}:Q${sheetRow}`)}?valueInputOption=USER_ENTERED`, {
         method: "PUT", body: JSON.stringify({ values: [companyToRow(company)] }),
       });

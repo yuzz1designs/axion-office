@@ -26,33 +26,21 @@ import {
   Sparkles,
   Layers,
   Building,
-  Tag
+  Tag,
+  Columns3,
+  Check
 } from "lucide-react";
 import { AccentColorOption } from "../../types/settings";
+import {
+  CRM_COLUMNS,
+  DEFAULT_VISIBLE_CRM_COLUMNS,
+  type CrmColumnKey,
+  type CrmCompany,
+} from "../../server/crmCompany";
 
 interface DatabaseScreenProps {
   accentColor?: AccentColorOption;
   onBackToOverview?: () => void;
-}
-
-interface CrmCompany {
-  id: string;
-  company: string;
-  website: string;
-  sector: string;
-  country: string;
-  city: string;
-  source: string;
-  idealFit: string;
-  priority: string;
-  owner: string;
-  leadStatus: string;
-  createdAt: string;
-  lastContact: string;
-  nextAction: string;
-  serviceInterest: string;
-  estimatedMonthlyValue: string;
-  notes: string;
 }
 
 interface DataRecord {
@@ -172,6 +160,8 @@ const toDataRecord = (company: CrmCompany): DataRecord => ({
   crm: company,
 });
 
+const VISIBLE_COLUMNS_STORAGE_KEY = "axion_crm_visible_columns";
+
 export default function DatabaseScreen({
   accentColor = {
     id: "axion-blue",
@@ -191,6 +181,19 @@ export default function DatabaseScreen({
   const [isNewRecordModalOpen, setIsNewRecordModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<CrmCompany | null>(null);
   const [syncError, setSyncError] = useState("");
+  const [isColumnPickerOpen, setIsColumnPickerOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<CrmColumnKey[]>(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY) || "null") as unknown;
+      if (Array.isArray(stored)) {
+        const valid = stored.filter((key): key is CrmColumnKey => CRM_COLUMNS.some((column) => column.key === key));
+        if (valid.length) return valid;
+      }
+    } catch {
+      // Use the curated default when storage is unavailable or invalid.
+    }
+    return DEFAULT_VISIBLE_CRM_COLUMNS;
+  });
 
   // New Record Form State
   const [newCode, setNewCode] = useState("");
@@ -199,6 +202,19 @@ export default function DatabaseScreen({
   const [newLocation, setNewLocation] = useState("");
   const [newOwner, setNewOwner] = useState("Nelson Afonso");
   const [newCost, setNewCost] = useState("");
+
+  const ownerOptions = useMemo(() => Array.from(new Set<string>(
+    records.map((record) => record.crm?.owner.trim() || "").filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b, "pt")), [records]);
+
+  const toggleColumn = (key: CrmColumnKey) => {
+    setVisibleColumns((current) => {
+      if (key === "company") return current;
+      const next = current.includes(key) ? current.filter((column) => column !== key) : [...current, key];
+      window.localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true);
@@ -245,8 +261,9 @@ export default function DatabaseScreen({
     setSyncError("");
     try {
       const response = await fetch("/api/crm/companies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(company) });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || "Não foi possível gravar no Google Sheets.");
+      const result = await response.json() as { company?: CrmCompany; error?: string; detail?: string };
+      if (!response.ok || !result.company) throw new Error(result.detail || result.error || "Não foi possível gravar no Google Sheets.");
+      setRecords((current) => [...current.filter((record) => record.id !== result.company!.id), toDataRecord(result.company!)]);
       setIsNewRecordModalOpen(false);
       setNewCode(""); setNewName(""); setNewLocation(""); setNewCost("");
       await handleSync();
@@ -322,6 +339,37 @@ export default function DatabaseScreen({
           </div>
 
           <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsColumnPickerOpen((open) => !open)}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Columns3 size={13} />
+                <span>Colunas ({visibleColumns.length}/17)</span>
+              </button>
+              {isColumnPickerOpen && (
+                <div className="absolute right-0 top-full mt-2 z-40 w-72 max-h-[420px] overflow-y-auto rounded-2xl border border-white/15 bg-[#0c1017]/95 p-2 shadow-2xl backdrop-blur-xl">
+                  {CRM_COLUMNS.map((column) => {
+                    const selected = visibleColumns.includes(column.key);
+                    return (
+                      <button
+                        key={column.key}
+                        type="button"
+                        disabled={column.key === "company"}
+                        onClick={() => toggleColumn(column.key)}
+                        className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs text-white/70 hover:bg-white/[0.06] hover:text-white disabled:cursor-default"
+                      >
+                        <span>{column.label}</span>
+                        <span className={`grid h-4 w-4 place-items-center rounded border ${selected ? "border-[var(--axion-accent)] bg-[var(--axion-accent)] text-slate-950" : "border-white/20"}`}>
+                          {selected && <Check size={11} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             {selectedRecord?.crm && (
               <button
                 type="button"
@@ -344,7 +392,7 @@ export default function DatabaseScreen({
 
             <button
               type="button"
-              onClick={() => setIsNewRecordModalOpen(true)}
+              onClick={() => { setSyncError(""); setIsNewRecordModalOpen(true); }}
               style={{
                 backgroundColor: accentColor.hex,
                 color: "#050609",
@@ -468,20 +516,15 @@ export default function DatabaseScreen({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 text-[10px] font-mono text-white/40 uppercase tracking-wider">
-                <th className="py-3 px-3 font-semibold">Cód. / Ref</th>
-                <th className="py-3 px-3 font-semibold">Empresa</th>
-                <th className="py-3 px-3 font-semibold">Setor</th>
-                <th className="py-3 px-3 font-semibold">Cidade / País</th>
-                <th className="py-3 px-3 font-semibold">Responsável</th>
-                <th className="py-3 px-3 font-semibold">Estado</th>
-                <th className="py-3 px-3 font-semibold text-right">Valor mensal estimado</th>
-                <th className="py-3 px-3 font-semibold text-right">Último contacto</th>
+                {CRM_COLUMNS.filter((column) => visibleColumns.includes(column.key)).map((column) => (
+                  <th key={column.key} className="py-3 px-3 font-semibold whitespace-nowrap">{column.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-sans text-xs">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-white/40 text-xs">
+                  <td colSpan={visibleColumns.length} className="py-12 text-center text-white/40 text-xs">
                     Nenhum registo encontrado para os filtros selecionados.
                   </td>
                 </tr>
@@ -496,55 +539,24 @@ export default function DatabaseScreen({
                         isSelected ? "bg-white/[0.05]" : ""
                       }`}
                     >
-                      {/* Code */}
-                      <td className="py-3 px-3 font-mono text-[11px] font-semibold" style={{ color: accentColor.hex }}>
-                        {rec.code}
-                      </td>
-
-                      {/* Name */}
-                      <td className="py-3 px-3 font-medium text-white group-hover:text-[var(--axion-accent)] transition-colors">
-                        {rec.name}
-                      </td>
-
-                      {/* Category */}
-                      <td className="py-3 px-3 text-white/60">
-                        <span className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/5 text-[11px]">
-                          {rec.category}
-                        </span>
-                      </td>
-
-                      {/* Location */}
-                      <td className="py-3 px-3 text-white/50 text-[11px]">
-                        {rec.location}
-                      </td>
-
-                      {/* Owner */}
-                      <td className="py-3 px-3 text-white/70 text-[11px]">
-                        {rec.owner}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
-                          rec.status === "Ativo" 
-                            ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/20" 
-                            : rec.status === "Pendente" 
-                            ? "text-amber-400 bg-amber-400/10 border-amber-400/20" 
-                            : "text-cyan-400 bg-cyan-400/10 border-cyan-400/20"
-                        }`}>
-                          {rec.status}
-                        </span>
-                      </td>
-
-                      {/* Cost */}
-                      <td className="py-3 px-3 font-mono text-white/80 text-right text-[11px]">
-                        {rec.cost}
-                      </td>
-
-                      {/* Last Sync */}
-                      <td className="py-3 px-3 font-mono text-white/40 text-right text-[10px]">
-                        {rec.lastSync}
-                      </td>
+                      {CRM_COLUMNS.filter((column) => visibleColumns.includes(column.key)).map((column) => {
+                        const value = rec.crm?.[column.key] || "—";
+                        return (
+                          <td
+                            key={column.key}
+                            className={`py-3 px-3 max-w-[260px] truncate whitespace-nowrap text-[11px] ${
+                              column.key === "company" ? "font-medium text-white group-hover:text-[var(--axion-accent)]" :
+                              column.key === "id" ? "font-mono font-semibold" : "text-white/65"
+                            }`}
+                            style={column.key === "id" ? { color: accentColor.hex } : undefined}
+                            title={value}
+                          >
+                            {column.key === "website" && value !== "—" ? (
+                              <a href={value} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-[var(--axion-accent)] hover:underline">{value}</a>
+                            ) : value}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })
@@ -591,6 +603,7 @@ export default function DatabaseScreen({
                       <span>{label}</span>
                       <input
                         value={editingCompany[field]}
+                        list={field === "owner" ? "crm-owner-options" : undefined}
                         required={field === "company"}
                         onChange={(event) => setEditingCompany((current) => current ? { ...current, [field]: event.target.value } : current)}
                         className="px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white outline-none focus:border-[var(--axion-accent)]"
@@ -671,6 +684,25 @@ export default function DatabaseScreen({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
+                  <label className="text-white/80 font-medium">Responsável</label>
+                  <input
+                    type="text"
+                    list="crm-owner-options"
+                    placeholder="Selecionar ou escrever responsável"
+                    value={newOwner}
+                    onChange={(event) => setNewOwner(event.target.value)}
+                    className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
+                  />
+                </div>
+
+                {syncError && (
+                  <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-red-200">
+                    <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                    <span>{syncError}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
                   <label className="text-white/80 font-medium">Nome da Empresa *</label>
                   <input
                     type="text"
@@ -716,13 +748,14 @@ export default function DatabaseScreen({
                   </button>
                   <button
                     type="submit"
+                    disabled={isSyncing}
                     style={{
                       backgroundColor: accentColor.hex,
                       color: "#050609"
                     }}
-                    className="px-5 py-2 rounded-xl font-bold text-xs hover:brightness-110 transition-all cursor-pointer"
+                    className="px-5 py-2 rounded-xl font-bold text-xs hover:brightness-110 transition-all cursor-pointer disabled:cursor-wait disabled:opacity-50"
                   >
-                    Gravar e Sincronizar
+                    {isSyncing ? "A gravar..." : "Gravar e Sincronizar"}
                   </button>
                 </div>
               </form>
@@ -730,6 +763,10 @@ export default function DatabaseScreen({
           </div>
         )}
       </AnimatePresence>
+
+      <datalist id="crm-owner-options">
+        {ownerOptions.map((owner) => <option key={owner} value={owner} />)}
+      </datalist>
 
     </div>
   );
