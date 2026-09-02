@@ -70,7 +70,7 @@ export default function WorkFocusAndQuiet() {
                   type="time"
                   value={quiet.startTime}
                   onChange={(e) => setQuiet({ ...quiet, startTime: e.target.value })}
-                  className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-mono outline-none focus:border-[#00f0ff]"
+                  className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-mono outline-none focus:border-[var(--axion-accent)]"
                 />
               </div>
 
@@ -80,7 +80,7 @@ export default function WorkFocusAndQuiet() {
                   type="time"
                   value={quiet.endTime}
                   onChange={(e) => setQuiet({ ...quiet, endTime: e.target.value })}
-                  className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-mono outline-none focus:border-[#00f0ff]"
+                  className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-mono outline-none focus:border-[var(--axion-accent)]"
                 />
               </div>
             </div>
@@ -99,7 +99,7 @@ export default function WorkFocusAndQuiet() {
                       onClick={() => toggleDay(d.id)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-sans font-medium transition-all cursor-pointer ${
                         isActive
-                          ? "bg-[#00f0ff] text-[#050609] font-semibold shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+                          ? "bg-[var(--axion-accent)] text-[#050609] font-semibold shadow-[0_0_10px_color-mix(in_srgb,var(--axion-accent)_30%,transparent)]"
                           : "bg-white/5 text-white/40 hover:text-white"
                       }`}
                     >
@@ -177,13 +177,13 @@ export default function WorkFocusAndQuiet() {
 
         {/* Post Focus Summary Preview */}
         {focus.showPostFocusSummary && (
-          <div className="mt-3 p-4 rounded-2xl bg-[#00f0ff]/[0.03] border border-[#00f0ff]/20 flex items-center justify-between">
+          <div className="mt-3 p-4 rounded-2xl bg-[var(--axion-accent)]/[0.03] border border-[var(--axion-accent)]/20 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-[#00f0ff]/10 flex items-center justify-center text-[#00f0ff]">
+              <div className="w-8 h-8 rounded-xl bg-[var(--axion-accent)]/10 flex items-center justify-center text-[var(--axion-accent)]">
                 <Zap size={16} />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-mono text-[#00f0ff] uppercase tracking-wider">
+                <span className="text-[10px] font-mono text-[var(--axion-accent)] uppercase tracking-wider">
                   PREVIEW DE RELATÓRIO PÓS-FOCO
                 </span>
                 <span className="text-xs text-white/80 font-sans">

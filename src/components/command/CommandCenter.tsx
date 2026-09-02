@@ -10,6 +10,7 @@ import {
 } from "../../data/mockData";
 import { 
   DEFAULT_APPEARANCE,
+  DEFAULT_COMMAND_CENTER,
   ACCENT_COLOR_OPTIONS
 } from "../../data/settingsMockData";
 import { 
@@ -27,7 +28,8 @@ import {
   UpcomingMeeting, 
   ActivityLog 
 } from "../../types";
-import { AppearanceSettings } from "../../types/settings";
+import { AppearanceSettings, CommandCenterConfig, LanguageRegionSettings } from "../../types/settings";
+import { useLanguage } from "../../i18n/LanguageContext";
 import AxionLogo from "../ui/AxionLogo";
 import AivaStatus from "../aiva/AivaStatus";
 import AivaOverviewScreen from "../aiva/AivaOverviewScreen";
@@ -61,17 +63,28 @@ interface CommandCenterProps {
   onBackToWelcome?: () => void;
   appearance?: AppearanceSettings;
   onAppearanceChange?: (appearance: AppearanceSettings) => void;
+  commandCenterConfig?: CommandCenterConfig;
+  onCommandCenterConfigChange?: (config: CommandCenterConfig) => void;
+  languageRegion?: LanguageRegionSettings;
+  onLanguageRegionChange?: (settings: LanguageRegionSettings) => void;
 }
 
 export default function CommandCenter({ 
   onBackToWelcome,
   appearance: initialAppearance,
-  onAppearanceChange
+  onAppearanceChange,
+  commandCenterConfig = DEFAULT_COMMAND_CENTER,
+  onCommandCenterConfigChange,
+  languageRegion,
+  onLanguageRegionChange,
 }: CommandCenterProps) {
+  const { language, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<NavTabId>("overview");
   const [priorities, setPriorities] = useState<PriorityItem[]>(MOCK_PRIORITIES);
   const [todayTasks, setTodayTasks] = useState<TodayItem[]>(MOCK_TODAY);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date("2026-08-30T22:56:00")); // Synced mock evening
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  const [sessionStartedAt] = useState(() => Date.now());
+  const [sessionDurationSeconds, setSessionDurationSeconds] = useState(0);
   const [activePulse, setActivePulse] = useState<string | null>(null);
   const [systemBooted, setSystemBooted] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -121,6 +134,24 @@ export default function CommandCenter({
 
   const isLight = appearance.theme === "light";
   const currentAccent = ACCENT_COLOR_OPTIONS.find(c => c.id === appearance.accentColor) || ACCENT_COLOR_OPTIONS[0];
+  const visibleModuleIds = new Set(
+    commandCenterConfig.modules.filter((module) => module.visible).map((module) => module.id),
+  );
+  const isModuleVisible = (moduleId: string) => visibleModuleIds.has(moduleId);
+  const moduleOrder = (moduleId: string) => {
+    const index = commandCenterConfig.modules.findIndex((module) => module.id === moduleId);
+    return index === -1 ? commandCenterConfig.modules.length : index;
+  };
+  const showLeftColumn = isModuleVisible("projects") || isModuleVisible("priorities") || isModuleVisible("my-tasks");
+  const showRightColumn = isModuleVisible("today") || isModuleVisible("meetings");
+  const showBottomRow = isModuleVisible("recent-activity") || isModuleVisible("briefing") ||
+    isModuleVisible("sales") || isModuleVisible("finance") || isModuleVisible("team-activity");
+  const leftColumnWidth = commandCenterConfig.primaryMetric === "priorities"
+    ? "lg:w-[350px] xl:w-[390px]"
+    : "lg:w-[290px] xl:w-[330px]";
+  const rightColumnWidth = ["today", "meetings"].includes(commandCenterConfig.primaryMetric)
+    ? "lg:w-[350px] xl:w-[390px]"
+    : "lg:w-[290px] xl:w-[330px]";
 
   // Synchronize document theme attribute and class for full app-wide light/dark propagation
   useEffect(() => {
@@ -134,11 +165,13 @@ export default function CommandCenter({
     }
   }, [appearance.theme]);
 
-  // Update clock every minute
+  // Keep the real clock and the current Office session duration synchronized.
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(prev => new Date(prev.getTime() + 60000));
-    }, 60000);
+      const now = Date.now();
+      setCurrentTime(new Date(now));
+      setSessionDurationSeconds(Math.floor((now - sessionStartedAt) / 1000));
+    }, 1000);
     
     // Simulate initial system boot sequence delay
     const bootTimer = setTimeout(() => {
@@ -149,7 +182,14 @@ export default function CommandCenter({
       clearInterval(timer);
       clearTimeout(bootTimer);
     };
-  }, []);
+  }, [sessionStartedAt]);
+
+  const formatSessionDuration = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+  };
 
   // Track mouse coordinates to provide subtle parallax on the central Core logo
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -172,9 +212,9 @@ export default function CommandCenter({
   // Dynamic greeting based on time (Hour is 22 based on seed)
   const getGreeting = () => {
     const hour = currentTime.getHours();
-    if (hour < 12 && hour >= 6) return "GOOD MORNING";
-    if (hour < 18 && hour >= 12) return "GOOD AFTERNOON";
-    return "GOOD EVENING";
+    if (hour < 12 && hour >= 6) return t("home.goodMorning");
+    if (hour < 18 && hour >= 12) return t("home.goodAfternoon");
+    return t("home.goodEvening");
   };
 
   // Formatting date in Portuguese locale to align with elegant editorial
@@ -184,7 +224,7 @@ export default function CommandCenter({
       day: "numeric", 
       month: "long" 
     };
-    return currentTime.toLocaleDateString("pt-PT", options).toUpperCase();
+    return currentTime.toLocaleDateString(language === "pt" ? "pt-PT" : "en-US", options).toUpperCase();
   };
 
   // Pulse bullet colors
@@ -415,10 +455,14 @@ export default function CommandCenter({
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="w-full h-full overflow-y-auto pr-2 relative z-10"
           >
-            <SettingsPage 
-              initialAppearance={appearance}
-              onAppearanceChange={handleAppearanceUpdate}
-            />
+              <SettingsPage 
+                initialAppearance={appearance}
+                onAppearanceChange={handleAppearanceUpdate}
+                initialCommandCenter={commandCenterConfig}
+                onCommandCenterChange={onCommandCenterConfigChange}
+                initialLanguageRegion={languageRegion}
+                onLanguageRegionChange={onLanguageRegionChange}
+              />
           </motion.div>
         ) : activeTab === "aiva" ? (
           <motion.div
@@ -526,7 +570,7 @@ export default function CommandCenter({
                   borderColor: `${currentAccent.hex}30`
                 }}
               >
-                ADMIN ACCESS SECURED
+                {t("home.access")}
               </span>
             </div>
             
@@ -543,7 +587,7 @@ export default function CommandCenter({
             </span>
           </motion.div>
 
-          {/* Top-Right: Station Clock & Reset Toggle */}
+          {/* Top-Right: Office session duration & exit */}
           <motion.div 
             custom={1}
             initial="hidden"
@@ -551,14 +595,12 @@ export default function CommandCenter({
             variants={itemVariants}
             className="flex items-center gap-6 self-end md:self-start"
           >
-            {/* Live digital Clock */}
+            {/* Time elapsed since the user entered AXION OFFICE */}
             <div className="text-right flex flex-col">
-              <div className="text-xs font-mono tracking-widest text-white/30 uppercase">SYSTEM COORDINATE TIME</div>
+              <div className="text-xs font-mono tracking-widest text-white/30 uppercase">{t("home.session")}</div>
               <div className="text-2xl font-mono font-medium text-white flex items-center gap-2.5 mt-1 justify-end">
                 <Clock size={16} style={{ color: currentAccent.hex }} className="animate-pulse" />
-                <span>
-                  {currentTime.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </span>
+                <span>{formatSessionDuration(sessionDurationSeconds)}</span>
               </div>
             </div>
 
@@ -580,22 +622,27 @@ export default function CommandCenter({
         <div className="flex-1 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-14 my-2 relative w-full">
           
           {/* LEFT SIDE DATA COLUMN - Firmly anchored to the left */}
-          <div className="w-full lg:w-[310px] xl:w-[340px] shrink-0 flex flex-col justify-center gap-7 self-center z-20">
+          {showLeftColumn && (
+          <motion.div
+            layout
+            className={`w-full ${leftColumnWidth} shrink-0 flex flex-col justify-center gap-7 self-center z-20 transition-[width] duration-500`}
+          >
             
             {/* AXION Pulse Section */}
-            <motion.div 
+            {isModuleVisible("projects") && <motion.div 
               custom={2}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
               className="flex flex-col gap-3.5 text-left"
+              style={{ order: moduleOrder("projects") }}
             >
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                 <div 
                   className="w-1.5 h-1.5 rounded-full animate-ping" 
                   style={{ backgroundColor: currentAccent.hex, boxShadow: `0 0 10px ${currentAccent.hex}` }}
                 />
-                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">AXION PULSE STATUS</h3>
+                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">{t("home.pulse")}</h3>
               </div>
               
               <div className="flex flex-col gap-2.5">
@@ -624,23 +671,24 @@ export default function CommandCenter({
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </motion.div>}
 
             {/* Priorities Panel */}
-            <motion.div 
+            {isModuleVisible("priorities") && <motion.div 
               custom={3}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
               className="flex flex-col gap-3.5"
+              style={{ order: moduleOrder("priorities") }}
             >
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">CRITICAL PRIORITIES</h3>
+                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">{t("home.priorities")}</h3>
                 <span className="font-mono text-[9px] text-rose-500/80 ml-auto bg-rose-500/10 px-1.5 py-0.5 rounded">ACT</span>
               </div>
               
               <div className="flex flex-col gap-3.5">
-                {priorities.map((item) => (
+                {priorities.slice(0, commandCenterConfig.recentItemsCount).map((item) => (
                   <div 
                     key={item.id} 
                     className="group flex flex-col gap-1 pl-3.5 border-l-2 border-white/10 hover:border-brand-accent transition-colors duration-500 py-0.5"
@@ -660,9 +708,30 @@ export default function CommandCenter({
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </motion.div>}
 
-          </div>
+            {isModuleVisible("my-tasks") && (
+              <motion.div
+                layout
+                custom={3}
+                initial="hidden"
+                animate={systemBooted ? "visible" : "hidden"}
+                variants={itemVariants}
+                style={{ order: moduleOrder("my-tasks") }}
+                className="flex items-center justify-between rounded-sm border border-white/5 bg-white/[0.015] px-3.5 py-3"
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono tracking-[0.2em] text-white/35 uppercase">{t("home.myTasks")}</span>
+                  <span className="text-xs text-white/70">{t("home.pendingTasks")}</span>
+                </div>
+                <span className="text-2xl font-light" style={{ color: currentAccent.hex }}>
+                  {todayTasks.filter((task) => !task.completed).length}
+                </span>
+              </motion.div>
+            )}
+
+          </motion.div>
+          )}
 
           {/* CENTRAL CORE HERO LOGO (Centered with calibrated orbital rings & ample margin) */}
           <div className="flex-1 flex flex-col items-center justify-center relative py-6 lg:py-0 self-center min-w-0">
@@ -748,34 +817,40 @@ export default function CommandCenter({
           </div>
 
           {/* RIGHT SIDE DATA COLUMN - Firmly anchored to the right */}
-          <div className="w-full lg:w-[310px] xl:w-[340px] shrink-0 flex flex-col justify-center gap-7 self-center z-20">
+          {showRightColumn && (
+          <motion.div
+            layout
+            className={`w-full ${rightColumnWidth} shrink-0 flex flex-col justify-center gap-7 self-center z-20 transition-[width] duration-500`}
+          >
             
             {/* Today's Agenda Checklist */}
-            <motion.div 
+            {isModuleVisible("today") && <motion.div 
               custom={4}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
               className="flex flex-col gap-3.5 text-left"
+              style={{ order: moduleOrder("today") }}
             >
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                 <h3 
                   onClick={() => setActiveTab("calendar")}
-                  className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase hover:text-white cursor-pointer transition-colors"
+                  className="text-xs font-mono tracking-[0.2em] text-white/60 uppercase hover:text-white cursor-pointer transition-colors"
                 >
-                  TODAY'S OPERATIONS
+                  {t("home.today")}
                 </h3>
                 <button
                   onClick={() => setActiveTab("calendar")}
-                  className="text-[10px] font-mono text-white/30 hover:text-brand-accent ml-auto flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-[10px] font-mono ml-auto flex items-center gap-1 transition-all cursor-pointer opacity-60 hover:opacity-100"
+                  style={{ color: currentAccent.hex }}
                 >
                   <Calendar size={11} />
-                  <span>3 SCHEDULED</span>
+                  <span>3 {t("home.scheduled")}</span>
                 </button>
               </div>
               
               <div className="flex flex-col gap-2.5">
-                {todayTasks.map((task) => (
+                {todayTasks.slice(0, commandCenterConfig.recentItemsCount).map((task) => (
                   <div 
                     key={task.id}
                     onClick={() => handleToggleTask(task.id)}
@@ -784,7 +859,7 @@ export default function CommandCenter({
                     {/* Tick box toggle */}
                     <button className="text-white/40 group-hover:text-brand-accent transition-colors duration-300 mt-0.5 outline-none">
                       {task.completed ? (
-                        <CheckCircle2 size={14} className="text-brand-accent" />
+                        <CheckCircle2 size={14} style={{ color: currentAccent.hex }} />
                       ) : (
                         <Circle size={14} className="text-white/20 group-hover:text-brand-accent/50" />
                       )}
@@ -797,7 +872,7 @@ export default function CommandCenter({
                         {task.title}
                       </span>
                       <div className="flex items-center gap-2 text-[10px] font-mono text-white/30">
-                        <span className="text-brand-accent/55">{task.time}</span>
+                        <span style={{ color: currentAccent.hex }}>{task.time}</span>
                         <span>•</span>
                         <span>{task.meta}</span>
                       </div>
@@ -805,18 +880,19 @@ export default function CommandCenter({
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </motion.div>}
 
             {/* Upcoming Event Module */}
-            <motion.div 
+            {isModuleVisible("meetings") && <motion.div 
               custom={5}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
               className="flex flex-col gap-3.5"
+              style={{ order: moduleOrder("meetings") }}
             >
               <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">UPCOMING ENGAGEMENT</h3>
+                <h3 className="text-xs font-mono tracking-[0.2em] text-white/60 uppercase">{t("home.meeting")}</h3>
               </div>
               
               <div 
@@ -826,8 +902,8 @@ export default function CommandCenter({
                 }}
                 className="group relative p-3.5 bg-white/[0.01] hover:bg-white/[0.02] border border-white/5 hover:border-brand-accent/20 rounded-sm transition-all duration-500 flex flex-col gap-2.5 cursor-pointer"
               >
-                <div className="flex items-center gap-2 text-[10px] font-mono text-brand-accent/80">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse" />
+                <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: currentAccent.hex }}>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: currentAccent.hex, boxShadow: `0 0 8px ${currentAccent.glow}` }} />
                   <span>{MOCK_UPCOMING.timeText.toUpperCase()}</span>
                 </div>
                 
@@ -841,21 +917,25 @@ export default function CommandCenter({
                 </div>
                 
                 <span className="text-[9px] font-mono text-white/30 tracking-wide mt-0.5 flex items-center gap-1 group-hover:text-white/50 transition-colors">
-                  <span>ORCHESTRATE CLIENT LINK</span>
+                  <span>{t("home.openMeeting")}</span>
                   <ArrowRight size={10} className="transform group-hover:translate-x-1 transition-transform" />
                 </span>
               </div>
-            </motion.div>
+            </motion.div>}
 
-          </div>
+          </motion.div>
+          )}
 
         </div>
 
         {/* ==================== BOTTOM ROW (ACTIVITY & AIVA) ==================== */}
-        <div className="flex flex-col md:flex-row justify-between items-end gap-8 border-t border-white/5 pt-6 relative z-10">
+        {showBottomRow && <motion.div
+          layout
+          className="flex flex-col md:flex-row justify-between items-end gap-5 border-t border-white/5 pt-5 relative z-10"
+        >
           
           {/* Bottom-Left: Activity Logs */}
-          <motion.div 
+          {isModuleVisible("recent-activity") && <motion.div 
             custom={6}
             initial="hidden"
             animate={systemBooted ? "visible" : "hidden"}
@@ -864,11 +944,11 @@ export default function CommandCenter({
           >
             <div className="flex items-center gap-2.5">
               <Activity size={12} className="text-white/30 animate-pulse" />
-              <h3 className="text-[10px] font-mono tracking-[0.2em] text-white/30 uppercase">SYSTEM REGISTRY ACTIVITY</h3>
+              <h3 className="text-[10px] font-mono tracking-[0.2em] text-white/30 uppercase">{t("home.activity")}</h3>
             </div>
             
             <div className="flex flex-col gap-2">
-              {MOCK_ACTIVITIES.map((log) => (
+              {MOCK_ACTIVITIES.slice(0, commandCenterConfig.recentItemsCount).map((log) => (
                 <div key={log.id} className="flex items-center gap-3 text-[10px] font-mono text-white/50 hover:text-white/80 transition-colors py-0.5">
                   <span className="text-brand-accent/70 w-10">{log.timestamp}</span>
                   <span className="text-white/20">•</span>
@@ -878,10 +958,28 @@ export default function CommandCenter({
                 </div>
               ))}
             </div>
-          </motion.div>
+          </motion.div>}
+
+          {(isModuleVisible("sales") || isModuleVisible("finance") || isModuleVisible("team-activity")) && (
+            <motion.div layout className="flex flex-1 flex-wrap gap-3">
+              {[
+                { id: "sales", label: t("home.sales"), value: "12", meta: t("home.activeOpportunities") },
+                { id: "finance", label: t("home.finance"), value: "€24.8K", meta: t("home.trackedMonth") },
+                { id: "team-activity", label: t("home.team"), value: "3", meta: t("home.partnersActive") },
+              ].filter((item) => isModuleVisible(item.id)).sort((a, b) => moduleOrder(a.id) - moduleOrder(b.id)).map((item) => (
+                <div key={item.id} className="min-w-[150px] flex-1 border border-white/5 bg-white/[0.015] rounded-sm px-3.5 py-3">
+                  <span className="text-[9px] font-mono tracking-[0.2em] text-white/30">{item.label}</span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-lg font-light text-white/90">{item.value}</span>
+                    <span className="text-[9px] text-white/30">{item.meta}</span>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
 
           {/* Bottom-Right: AIVA daemon status module */}
-          <motion.div 
+          {isModuleVisible("briefing") && <motion.div 
             custom={7}
             initial="hidden"
             animate={systemBooted ? "visible" : "hidden"}
@@ -889,9 +987,9 @@ export default function CommandCenter({
             className="w-full md:w-auto self-end"
           >
             <AivaStatus isLight={isLight} onOpenAiva={() => setActiveTab("aiva")} />
-          </motion.div>
+          </motion.div>}
 
-        </div>
+        </motion.div>}
 
           </motion.div>
         )}

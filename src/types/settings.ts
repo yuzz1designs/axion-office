@@ -46,7 +46,7 @@ export interface SettingsNavCategory {
 // 1. APPEARANCE
 export type ThemeMode = "dark" | "light" | "system";
 
-export type AccentColorToken = "axion-blue" | "electric-blue" | "violet" | "cyan" | "silver" | "graphite";
+export type AccentColorToken = "axion-blue" | "electric-blue" | "violet" | "red" | "silver" | "graphite";
 
 export interface AccentColorOption {
   id: AccentColorToken;

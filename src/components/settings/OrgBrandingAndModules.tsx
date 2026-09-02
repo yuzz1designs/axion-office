@@ -67,7 +67,7 @@ export default function OrgBrandingAndModules() {
     <div className="flex flex-col gap-6">
       {/* Action Toast Feedback */}
       {toastMsg && (
-        <div className="p-3 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center justify-between animate-fadeIn">
+        <div className="p-3 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 text-xs font-mono text-[var(--axion-accent)] flex items-center justify-between animate-fadeIn">
           <span>{toastMsg}</span>
           <span className="text-white/40 text-[10px]">Configuração Global</span>
         </div>
@@ -87,7 +87,7 @@ export default function OrgBrandingAndModules() {
               type="text"
               value={branding.workspaceName}
               onChange={(e) => setBranding({ ...branding, workspaceName: e.target.value })}
-              className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-sans outline-none focus:border-[#00f0ff]"
+              className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-sans outline-none focus:border-[var(--axion-accent)]"
             />
           </div>
 
@@ -97,7 +97,7 @@ export default function OrgBrandingAndModules() {
               type="text"
               value={branding.companyName}
               onChange={(e) => setBranding({ ...branding, companyName: e.target.value })}
-              className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-sans outline-none focus:border-[#00f0ff]"
+              className="bg-[#121824] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white font-sans outline-none focus:border-[var(--axion-accent)]"
             />
           </div>
         </div>
@@ -189,7 +189,7 @@ export default function OrgBrandingAndModules() {
                       {mod.name}
                     </span>
                     {mod.dataCountInfo && (
-                      <span className="text-[9px] font-mono text-[#00f0ff] bg-[#00f0ff]/10 px-1.5 py-0.2 rounded">
+                      <span className="text-[9px] font-mono text-[var(--axion-accent)] bg-[var(--axion-accent)]/10 px-1.5 py-0.2 rounded">
                         {mod.dataCountInfo}
                       </span>
                     )}

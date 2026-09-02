@@ -28,7 +28,7 @@ export default function WorkspaceProfilesExperimental() {
     <div className="flex flex-col gap-6">
       {/* Action Toast Feedback */}
       {toastMsg && (
-        <div className="p-3 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center justify-between animate-fadeIn">
+        <div className="p-3 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 text-xs font-mono text-[var(--axion-accent)] flex items-center justify-between animate-fadeIn">
           <span>{toastMsg}</span>
           <span className="text-white/40 text-[10px]">Workspace Profile Switcher</span>
         </div>
@@ -55,7 +55,7 @@ export default function WorkspaceProfilesExperimental() {
                 }}
                 className={`p-5 rounded-2xl border text-left flex flex-col justify-between gap-4 transition-all duration-300 cursor-pointer group ${
                   isSelected
-                    ? "bg-white/[0.08] border-[#00f0ff]/40 shadow-[0_0_20px_rgba(0,240,255,0.15)]"
+                    ? "bg-white/[0.08] border-[var(--axion-accent)]/40 shadow-[0_0_20px_color-mix(in_srgb,var(--axion-accent)_15%,transparent)]"
                     : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/15"
                 }`}
               >
@@ -63,7 +63,7 @@ export default function WorkspaceProfilesExperimental() {
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
                       isSelected
-                        ? "bg-[#00f0ff] text-[#050609]"
+                        ? "bg-[var(--axion-accent)] text-[#050609]"
                         : "bg-white/5 text-white/70 group-hover:text-white"
                     }`}
                   >
@@ -71,7 +71,7 @@ export default function WorkspaceProfilesExperimental() {
                   </div>
 
                   {isSelected && (
-                    <span className="text-[10px] font-mono text-[#00f0ff] bg-[#00f0ff]/10 border border-[#00f0ff]/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[10px] font-mono text-[var(--axion-accent)] bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Check size={10} className="stroke-[3]" />
                       ATIVO
                     </span>
@@ -103,7 +103,7 @@ export default function WorkspaceProfilesExperimental() {
         </div>
 
         <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-3">
-          <Sparkles size={16} className="text-[#00f0ff] shrink-0" />
+          <Sparkles size={16} className="text-[var(--axion-accent)] shrink-0" />
           <span className="text-xs text-white/60 font-sans">
             Os perfis permitem guardar presets personalizados e partilhá-los entre equipas de design, engenharia e gestão.
           </span>

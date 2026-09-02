@@ -75,7 +75,7 @@ export default function WorkBriefingsAndMeetings() {
         <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#00f0ff]/10 text-[#00f0ff] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-[var(--axion-accent)]/10 text-[var(--axion-accent)] flex items-center justify-center">
                 <FileText size={16} />
               </div>
               <div>
@@ -122,7 +122,7 @@ export default function WorkBriefingsAndMeetings() {
                         type="checkbox"
                         checked={(briefings.morning as any)[inc.key]}
                         onChange={(e) => updateMorning(inc.key as any, e.target.checked)}
-                        className="rounded border-white/20 bg-white/5 text-[#00f0ff] accent-[#00f0ff]"
+                        className="rounded border-white/20 bg-white/5 text-[var(--axion-accent)] accent-[var(--axion-accent)]"
                       />
                       <span>{inc.label}</span>
                     </label>
@@ -146,7 +146,7 @@ export default function WorkBriefingsAndMeetings() {
                       onClick={() => updateMorningDelivery(ch.key as any)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-sans transition-all cursor-pointer flex items-center gap-1.5 ${
                         (briefings.morning.delivery as any)[ch.key]
-                          ? "bg-[#00f0ff] text-[#050609] font-semibold"
+                          ? "bg-[var(--axion-accent)] text-[#050609] font-semibold"
                           : "bg-white/5 text-white/40 hover:text-white"
                       }`}
                     >

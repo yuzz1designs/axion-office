@@ -59,13 +59,27 @@ import OrgBrandingAndModules from "./OrgBrandingAndModules";
 import OrgDataIntegrationsAudit from "./OrgDataIntegrationsAudit";
 import WorkspaceProfilesExperimental from "./WorkspaceProfilesExperimental";
 import AivaSettingsComingSoon from "./AivaSettingsComingSoon";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 interface SettingsPageProps {
   initialAppearance?: AppearanceSettings;
   onAppearanceChange?: (appearance: AppearanceSettings) => void;
+  initialCommandCenter?: CommandCenterConfig;
+  onCommandCenterChange?: (config: CommandCenterConfig) => void;
+  initialLanguageRegion?: LanguageRegionSettings;
+  onLanguageRegionChange?: (settings: LanguageRegionSettings) => void;
 }
 
-export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, onAppearanceChange }: SettingsPageProps) {
+export default function SettingsPage({
+  initialAppearance = DEFAULT_APPEARANCE,
+  onAppearanceChange,
+  initialCommandCenter = DEFAULT_COMMAND_CENTER,
+  onCommandCenterChange,
+  initialLanguageRegion = DEFAULT_LANGUAGE_REGION,
+  onLanguageRegionChange,
+}: SettingsPageProps) {
+  const { language, t } = useLanguage();
+  const isPortuguese = language === "pt";
   // Navigation State
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>("appearance");
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,15 +89,15 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
 
   // Committed / Saved state snapshots
   const [savedAppearance, setSavedAppearance] = useState<AppearanceSettings>(initialAppearance);
-  const [savedLanguageRegion, setSavedLanguageRegion] = useState<LanguageRegionSettings>(DEFAULT_LANGUAGE_REGION);
-  const [savedCommandCenter, setSavedCommandCenter] = useState<CommandCenterConfig>(DEFAULT_COMMAND_CENTER);
+  const [savedLanguageRegion, setSavedLanguageRegion] = useState<LanguageRegionSettings>(initialLanguageRegion);
+  const [savedCommandCenter, setSavedCommandCenter] = useState<CommandCenterConfig>(initialCommandCenter);
   const [savedNavigation, setSavedNavigation] = useState<NavigationSettings>(DEFAULT_NAVIGATION);
   const [savedOrgBranding, setSavedOrgBranding] = useState<OrgBrandingSettings>(DEFAULT_ORG_BRANDING);
 
   // Live Draft Settings State (being actively edited)
   const [appearance, setAppearance] = useState<AppearanceSettings>(initialAppearance);
-  const [languageRegion, setLanguageRegion] = useState<LanguageRegionSettings>(DEFAULT_LANGUAGE_REGION);
-  const [commandCenter, setCommandCenter] = useState<CommandCenterConfig>(DEFAULT_COMMAND_CENTER);
+  const [languageRegion, setLanguageRegion] = useState<LanguageRegionSettings>(initialLanguageRegion);
+  const [commandCenter, setCommandCenter] = useState<CommandCenterConfig>(initialCommandCenter);
   const [navigation, setNavigation] = useState<NavigationSettings>(DEFAULT_NAVIGATION);
   const [orgBranding, setOrgBranding] = useState<OrgBrandingSettings>(DEFAULT_ORG_BRANDING);
 
@@ -132,6 +146,12 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
     if (onAppearanceChange) {
       onAppearanceChange(appearance);
     }
+    if (onCommandCenterChange) {
+      onCommandCenterChange(commandCenter);
+    }
+    if (onLanguageRegionChange) {
+      onLanguageRegionChange(languageRegion);
+    }
 
     showToast("Preferências guardadas com sucesso no AXION OFFICE.");
   };
@@ -146,6 +166,9 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
     if (onAppearanceChange) {
       onAppearanceChange(savedAppearance);
     }
+    if (onLanguageRegionChange) {
+      onLanguageRegionChange(savedLanguageRegion);
+    }
 
     showToast("Alterações descartadas.");
   };
@@ -155,47 +178,47 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
   // Category navigation structure (without accessibility)
   const navSections = [
     {
-      group: "PERSONAL",
+      group: isPortuguese ? "PESSOAL" : "PERSONAL",
       items: [
-        { id: "appearance" as SettingsCategory, label: "Appearance", desc: "Tema, luz da nav bar e da home", icon: Palette },
-        { id: "language" as SettingsCategory, label: "Language & Region", desc: "Fuso horário e moedas", icon: Globe },
-        { id: "command-center" as SettingsCategory, label: "My Command Center", desc: "Módulos da dashboard e ordem", icon: LayoutGrid },
-        { id: "navigation" as SettingsCategory, label: "Shortcuts", desc: "Atalhos rápidos e comandos de teclado", icon: CommandIcon },
+        { id: "appearance" as SettingsCategory, label: isPortuguese ? "Aspeto" : "Appearance", desc: isPortuguese ? "Tema, luz e ambiente visual" : "Theme, lighting and visual atmosphere", icon: Palette },
+        { id: "language" as SettingsCategory, label: t("settings.language"), desc: t("settings.languageDesc"), icon: Globe },
+        { id: "command-center" as SettingsCategory, label: isPortuguese ? "O meu Command Center" : "My Command Center", desc: isPortuguese ? "Módulos da Home e respetiva ordem" : "Home modules and display order", icon: LayoutGrid },
+        { id: "navigation" as SettingsCategory, label: isPortuguese ? "Atalhos" : "Shortcuts", desc: isPortuguese ? "Atalhos rápidos e comandos de teclado" : "Quick navigation and keyboard commands", icon: CommandIcon },
       ],
     },
     {
-      group: "WORK",
+      group: isPortuguese ? "TRABALHO" : "WORK",
       items: [
-        { id: "notifications" as SettingsCategory, label: "Notifications", desc: "Canais e prioridades", icon: Bell },
-        { id: "briefings" as SettingsCategory, label: "Briefings & Meetings", desc: "Resumos e atas inteligentes", icon: FileText },
-        { id: "integrations" as SettingsCategory, label: "Integrations & Schedule", desc: "Contas conectadas e horários", icon: Link2 },
-        { id: "aiva" as SettingsCategory, label: "AIVA Intelligence", desc: "Copiloto autónomo e telemetria", icon: Sparkles, badge: "BREVEMENTE" },
+        { id: "notifications" as SettingsCategory, label: isPortuguese ? "Notificações" : "Notifications", desc: isPortuguese ? "Canais e prioridades" : "Channels and priorities", icon: Bell },
+        { id: "briefings" as SettingsCategory, label: isPortuguese ? "Briefings e Reuniões" : "Briefings and Meetings", desc: isPortuguese ? "Resumos e atas inteligentes" : "Intelligent summaries and minutes", icon: FileText },
+        { id: "integrations" as SettingsCategory, label: isPortuguese ? "Integrações e Horário" : "Integrations and Schedule", desc: isPortuguese ? "Contas ligadas e disponibilidade" : "Connected accounts and availability", icon: Link2 },
+        { id: "aiva" as SettingsCategory, label: "AIVA Intelligence", desc: isPortuguese ? "Copiloto operacional inteligente" : "Intelligent operational copilot", icon: Sparkles, badge: isPortuguese ? "BREVEMENTE" : "COMING SOON" },
       ],
     },
     {
-      group: "ACCOUNT",
+      group: isPortuguese ? "CONTA" : "ACCOUNT",
       items: [
-        { id: "security" as SettingsCategory, label: "Security & Devices", desc: "2FA, passkeys e sessões ativas", icon: ShieldCheck },
+        { id: "security" as SettingsCategory, label: isPortuguese ? "Segurança e Dispositivos" : "Security and Devices", desc: isPortuguese ? "2FA, passkeys e sessões ativas" : "2FA, passkeys and active sessions", icon: ShieldCheck },
       ],
     },
     ...(isOrgAdmin
       ? [
           {
-            group: "ORGANIZATION",
-            badge: "ADMIN ONLY",
+            group: isPortuguese ? "ORGANIZAÇÃO" : "ORGANIZATION",
+            badge: isPortuguese ? "APENAS ADMIN" : "ADMIN ONLY",
             items: [
-              { id: "org-team" as SettingsCategory, label: "Team & Roles", desc: "Diretório de equipa e permissões", icon: Users },
-              { id: "org-branding" as SettingsCategory, label: "Branding & Modules", desc: "Identidade global e capacidades", icon: Building2 },
-              { id: "org-data" as SettingsCategory, label: "Data, Integrations & Audit", desc: "Retenção, GDPR e logs globais", icon: Database },
+              { id: "org-team" as SettingsCategory, label: isPortuguese ? "Equipa e Cargos" : "Team and Roles", desc: isPortuguese ? "Diretório de equipa e permissões" : "Team directory and permissions", icon: Users },
+              { id: "org-branding" as SettingsCategory, label: isPortuguese ? "Marca e Módulos" : "Branding and Modules", desc: isPortuguese ? "Identidade global e capacidades" : "Global identity and capabilities", icon: Building2 },
+              { id: "org-data" as SettingsCategory, label: isPortuguese ? "Dados, Integrações e Auditoria" : "Data, Integrations and Audit", desc: isPortuguese ? "Retenção, RGPD e registos globais" : "Retention, GDPR and global logs", icon: Database },
             ],
           },
         ]
       : []),
     {
-      group: "PROFILES",
-      badge: "EXPERIMENTAL",
+      group: isPortuguese ? "PERFIS" : "PROFILES",
+      badge: isPortuguese ? "EXPERIMENTAL" : "EXPERIMENTAL",
       items: [
-        { id: "workspace-profiles" as SettingsCategory, label: "Workspace Profiles", desc: "Presets Work, Focus e Meeting", icon: Layers },
+        { id: "workspace-profiles" as SettingsCategory, label: isPortuguese ? "Perfis do Workspace" : "Workspace Profiles", desc: isPortuguese ? "Predefinições de trabalho, foco e reunião" : "Work, focus and meeting presets", icon: Layers },
       ],
     },
   ];
@@ -215,7 +238,10 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
         return (
           <PersonalLanguageRegion
             settings={languageRegion}
-            onChange={setLanguageRegion}
+            onChange={(updated) => {
+              setLanguageRegion(updated);
+              onLanguageRegionChange?.(updated);
+            }}
           />
         );
       case "command-center":
@@ -546,4 +572,3 @@ export default function SettingsPage({ initialAppearance = DEFAULT_APPEARANCE, o
     </div>
   );
 }
-

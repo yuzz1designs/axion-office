@@ -64,7 +64,7 @@ export default function OrgDataIntegrationsAudit() {
     <div className="flex flex-col gap-6">
       {/* Action Toast Feedback */}
       {toastMsg && (
-        <div className="p-3 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center justify-between animate-fadeIn">
+        <div className="p-3 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 text-xs font-mono text-[var(--axion-accent)] flex items-center justify-between animate-fadeIn">
           <span>{toastMsg}</span>
           <span className="text-white/40 text-[10px]">Segurança & Auditoria</span>
         </div>
@@ -215,7 +215,7 @@ export default function OrgDataIntegrationsAudit() {
               placeholder="Filtrar logs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#121824] border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-[#00f0ff]"
+              className="w-full bg-[#121824] border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-[var(--axion-accent)]"
             />
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function OrgDataIntegrationsAudit() {
             <tbody className="divide-y divide-white/[0.04]">
               {filteredLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-white/[0.01] transition-colors">
-                  <td className="py-3 pr-4 text-xs font-mono text-[#00f0ff]">
+                  <td className="py-3 pr-4 text-xs font-mono text-[var(--axion-accent)]">
                     {log.timestamp}
                   </td>
                   <td className="py-3 px-3 text-xs font-semibold text-white/90 font-sans">

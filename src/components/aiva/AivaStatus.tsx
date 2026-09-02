@@ -51,8 +51,8 @@ export default function AivaStatus({
           exit={{ opacity: 0, y: -10, filter: "blur(5px)" }}
           className={`px-4 py-2.5 rounded text-[10px] max-w-xs font-mono text-right leading-relaxed mb-1 shadow-md ${
             isLight
-              ? "bg-white text-cyan-800 border border-cyan-500/40"
-              : "glass-panel-accent text-brand-accent/90 border-cyan-500/30"
+              ? "bg-white text-[var(--axion-accent-secondary)] border border-[var(--axion-accent)]/40"
+              : "glass-panel-accent text-brand-accent/90 border-[var(--axion-accent)]/30"
           }`}
         >
           {aivaMessage}
@@ -64,7 +64,7 @@ export default function AivaStatus({
         onClick={handleAivaClick}
         className={`group flex items-center gap-4 px-4 py-2.5 rounded-sm transition-all duration-500 ease-out text-right cursor-pointer ${
           isLight
-            ? "bg-white hover:bg-slate-50 border border-slate-200 hover:border-cyan-500/50 shadow-sm"
+            ? "bg-white hover:bg-slate-50 border border-slate-200 hover:border-[var(--axion-accent)]/50 shadow-sm"
             : "bg-brand-bg/40 hover:bg-brand-bg/80 border border-white/5 hover:border-brand-accent/30"
         }`}
       >
@@ -83,7 +83,7 @@ export default function AivaStatus({
           </div>
           
           <div className={`font-mono text-[10px] transition-colors duration-500 ${
-            isLight ? "text-slate-800 group-hover:text-cyan-700" : "text-white/70 group-hover:text-brand-accent"
+            isLight ? "text-slate-800 group-hover:text-[var(--axion-accent-secondary)]" : "text-white/70 group-hover:text-brand-accent"
           }`}>
             {statusText}
           </div>

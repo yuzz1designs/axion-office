@@ -7,6 +7,64 @@ import React from "react";
 import { motion } from "motion/react";
 import { Check } from "lucide-react";
 import { AccentColorOption, AccentColorToken } from "../../types/settings";
+import { useLanguage } from "../../i18n/LanguageContext";
+
+const PORTUGUESE_SETTINGS_COPY: Record<string, string> = {
+  "Theme": "Tema",
+  "Density & Typography": "Densidade e Tipografia",
+  "Interface Density": "Densidade da interface",
+  "Text Size": "Tamanho do texto",
+  "Interface Scale": "Escala da interface",
+  "Visual Effects & Atmosphere": "Efeitos Visuais e Ambiente",
+  "Background Motion": "Movimento do fundo",
+  "Glass Effects & Blurs": "Efeitos de vidro e desfoque",
+  "Ambient Lighting Core": "Iluminação ambiente central",
+  "Blur Transitions": "Transições com desfoque",
+  "Motion Preset": "Predefinição de movimento",
+  "Background Variant": "Variante de fundo",
+  "My Command Center": "O meu Command Center",
+  "Keyboard Shortcuts": "Atalhos de teclado",
+  "Delivery Channels": "Canais de entrega",
+  "Category Routing & Priorities": "Encaminhamento e prioridades por categoria",
+  "Personalized Briefings": "Briefings personalizados",
+  "Meetings & Transcription Intelligence": "Reuniões e transcrição inteligente",
+  "Meeting Audio Primary Language": "Idioma principal do áudio das reuniões",
+  "Personal Connected Accounts": "Contas pessoais ligadas",
+  "Work Routine & Availability": "Rotina de trabalho e disponibilidade",
+  "Work Location Regime": "Regime de localização de trabalho",
+  "Security & Access Credentials": "Segurança e credenciais de acesso",
+  "Corporate Single Sign-On (SSO)": "Single Sign-On corporativo (SSO)",
+  "Active Devices & Sessions": "Dispositivos e sessões ativas",
+  "Personal Activity & Security History": "Histórico pessoal de atividade e segurança",
+  "Team & Member Directory": "Diretório da equipa e membros",
+  "Roles & Permissions Matrix": "Matriz de cargos e permissões",
+  "Workspace Identity & Brand Guardrails": "Identidade do workspace e regras de marca",
+  "Corporate Theme Default": "Tema corporativo predefinido",
+  "Global Modules & Capabilities": "Módulos e capacidades globais",
+  "Organization-Wide Integrations": "Integrações da organização",
+  "Data Retention & Privacy Governance": "Retenção de dados e governação de privacidade",
+  "Meeting Transcripts Retention Period": "Período de retenção das transcrições",
+  "Activity & Security Logs Retention": "Retenção dos registos de atividade e segurança",
+  "Strict AI Data Isolation Guard": "Proteção estrita dos dados de IA",
+  "Organization Audit Trail": "Registo de auditoria da organização",
+  "Quiet Hours (Do Not Disturb)": "Período de silêncio (Não incomodar)",
+  "Enable Quiet Hours": "Ativar período de silêncio",
+  "Active Days": "Dias ativos",
+  "Allow Critical Notifications": "Permitir notificações críticas",
+  "Focus Mode Engine": "Modo de foco",
+  "Default Session Duration": "Duração predefinida da sessão",
+  "Workspace Profiles (Experimental)": "Perfis do workspace (Experimental)",
+  "AIVA Intelligence Engine": "Motor de inteligência AIVA",
+  "Voice Wake-Word («Hey AIVA».)": "Palavra de ativação por voz («Hey AIVA»)",
+};
+
+const useLocalizedSettingsCopy = () => {
+  const { language } = useLanguage();
+  return (text?: string) => {
+    if (!text || language !== "pt") return text;
+    return PORTUGUESE_SETTINGS_COPY[text] ?? text;
+  };
+};
 
 // ================= SECTION WRAPPER =================
 interface SettingsSectionProps {
@@ -28,6 +86,7 @@ export function SettingsSection({
   children,
   className = ""
 }: SettingsSectionProps) {
+  const localize = useLocalizedSettingsCopy();
   return (
     <motion.section
       id={id}
@@ -41,10 +100,10 @@ export function SettingsSection({
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <h2 className="text-lg md:text-xl font-sans font-semibold tracking-tight text-white">
-              {title}
+              {localize(title)}
             </h2>
             {badge && (
-              <span className="text-[10px] font-mono tracking-widest text-[#00f0ff] uppercase bg-[#00f0ff]/10 border border-[#00f0ff]/20 px-2.5 py-0.5 rounded-full">
+              <span className="text-[10px] font-mono tracking-widest text-[var(--axion-accent)] uppercase bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/20 px-2.5 py-0.5 rounded-full">
                 {badge}
               </span>
             )}
@@ -80,6 +139,7 @@ export function SettingsRow({
   className = "",
   alignTop = false,
 }: SettingsRowProps) {
+  const localize = useLocalizedSettingsCopy();
   return (
     <div
       className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-b border-white/[0.04] last:border-0 ${
@@ -88,7 +148,7 @@ export function SettingsRow({
     >
       <div className="flex flex-col gap-0.5 max-w-md">
         <span className="text-sm font-medium text-white/90 font-sans tracking-wide">
-          {label}
+          {localize(label)}
         </span>
         {description && (
           <span className="text-xs text-white/40 font-sans leading-normal">
@@ -130,7 +190,7 @@ export function SettingsToggle({
       className={`relative inline-flex shrink-0 cursor-pointer rounded-full transition-colors duration-300 ease-in-out focus:outline-none ${
         isSm ? "h-5 w-9" : "h-6 w-11"
       } ${
-        checked ? "bg-[#00f0ff] shadow-[0_0_12px_rgba(0,240,255,0.4)]" : "bg-white/10 hover:bg-white/15"
+        checked ? "bg-[var(--axion-accent)] shadow-[0_0_12px_var(--axion-accent-glow)]" : "bg-white/10 hover:bg-white/15"
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
     >
       <span
@@ -292,7 +352,7 @@ export function SettingsSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#00f0ff] outline-none"
+        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[var(--axion-accent)] outline-none"
       />
       <span className="font-mono text-xs text-white/70 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md min-w-[48px] text-center">
         {value}{unit}
@@ -329,7 +389,7 @@ export function SettingsButton({
   }[size];
 
   const variantClasses = {
-    primary: "bg-[#00f0ff] hover:bg-[#38f4ff] text-[#050609] font-semibold shadow-[0_0_15px_rgba(0,240,255,0.3)] active:scale-[0.98]",
+    primary: "bg-[var(--axion-accent)] hover:bg-[var(--axion-accent-hover)] text-[#050609] font-semibold shadow-[0_0_15px_color-mix(in_srgb,var(--axion-accent)_30%,transparent)] active:scale-[0.98]",
     secondary: "bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 active:scale-[0.98]",
     danger: "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 active:scale-[0.98]",
     ghost: "text-white/60 hover:text-white hover:bg-white/5",
@@ -371,7 +431,7 @@ export function SettingsSelect<T extends string | number>({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="bg-[#121824] text-white/90 border border-white/15 rounded-xl px-3.5 py-1.5 text-xs md:text-sm font-sans tracking-wide outline-none focus:border-[#00f0ff] transition-colors cursor-pointer appearance-none pr-8"
+        className="bg-[#121824] text-white/90 border border-white/15 rounded-xl px-3.5 py-1.5 text-xs md:text-sm font-sans tracking-wide outline-none focus:border-[var(--axion-accent)] transition-colors cursor-pointer appearance-none pr-8"
       >
         {options.map((opt) => (
           <option key={String(opt.value)} value={opt.value} className="bg-[#121824] text-white">

@@ -6,6 +6,7 @@
 import React from "react";
 import { Globe, Clock, DollarSign, Calendar as CalendarIcon } from "lucide-react";
 import { LanguageRegionSettings } from "../../types/settings";
+import { useLanguage } from "../../i18n/LanguageContext";
 import { 
   SettingsSection, 
   SettingsRow, 
@@ -22,6 +23,7 @@ export default function PersonalLanguageRegion({
   settings,
   onChange,
 }: PersonalLanguageRegionProps) {
+  const { t } = useLanguage();
   const updateField = <K extends keyof LanguageRegionSettings>(
     key: K,
     value: LanguageRegionSettings[K]
@@ -60,12 +62,12 @@ export default function PersonalLanguageRegion({
       {/* 1. LANGUAGE & TIMEZONE */}
       <SettingsSection
         id="section-language-timezone"
-        title="Language & Timezone"
-        description="Defina o idioma principal da interface e o fuso horário para sincronização de reuniões e prazos."
+        title={t("language.title")}
+        description={t("language.description")}
       >
         <SettingsRow
-          label="Interface Language"
-          description="Idioma de todos os menus, botões e relatórios automáticos."
+          label={t("language.interface")}
+          description={t("language.interfaceDesc")}
         >
           <SettingsSegmentedControl<"pt" | "en">
             id="lang-select"
@@ -79,8 +81,8 @@ export default function PersonalLanguageRegion({
         </SettingsRow>
 
         <SettingsRow
-          label="Primary Timezone"
-          description="Utilizado para prazos de projetos, logs e horários de equipa."
+          label={t("language.timezone")}
+          description={t("language.timezoneDesc")}
         >
           <SettingsSelect
             id="timezone-select"
@@ -101,12 +103,12 @@ export default function PersonalLanguageRegion({
       {/* 2. CURRENCY & NUMBER FORMAT */}
       <SettingsSection
         id="section-currency-number"
-        title="Currency & Numerics"
-        description="Símbolo monetário e convenções de casas decimais."
+        title={t("language.currencyTitle")}
+        description={t("language.currencyDesc")}
       >
         <SettingsRow
-          label="Primary Currency"
-          description="Moeda base em orçamentos, propostas e métricas financeiras."
+          label={t("language.primaryCurrency")}
+          description={t("language.primaryCurrencyDesc")}
         >
           <SettingsSegmentedControl<"EUR" | "USD" | "GBP">
             id="currency-select"
@@ -121,8 +123,8 @@ export default function PersonalLanguageRegion({
         </SettingsRow>
 
         <SettingsRow
-          label="Decimal Separator"
-          description="Símbolo para separação de cêntimos e frações numéricas."
+          label={t("language.decimal")}
+          description={t("language.decimalDesc")}
         >
           <SettingsSegmentedControl<"," | ".">
             id="decimal-sep"
@@ -136,30 +138,30 @@ export default function PersonalLanguageRegion({
         </SettingsRow>
 
         {/* LIVE REGIONAL PREVIEW PANEL */}
-        <div className="mt-4 p-5 rounded-2xl bg-white/[0.03] border border-[#00f0ff]/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="mt-4 p-5 rounded-2xl bg-white/[0.03] border border-[var(--axion-accent)]/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono tracking-widest text-[#00f0ff] uppercase">
-              PREVIEW REGIONAL EM TEMPO REAL
+            <span className="text-[10px] font-mono tracking-widest text-[var(--axion-accent)] uppercase">
+              {t("language.preview")}
             </span>
             <span className="text-xs text-white/50">
-              É assim que as datas, horas e valores serão apresentados no seu workspace:
+              {t("language.previewDesc")}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-white">
-              <CalendarIcon size={14} className="text-[#00f0ff]" />
+              <CalendarIcon size={14} className="text-[var(--axion-accent)]" />
               <span>{getFormattedDate()}</span>
             </div>
 
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-white">
-              <Clock size={14} className="text-[#00f0ff]" />
+              <Clock size={14} className="text-[var(--axion-accent)]" />
               <span>{getFormattedTime()}</span>
             </div>
 
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-white">
-              <DollarSign size={14} className="text-[#00f0ff]" />
-              <span className="font-semibold text-[#00f0ff]">{getFormattedCurrency()}</span>
+              <DollarSign size={14} className="text-[var(--axion-accent)]" />
+              <span className="font-semibold text-[var(--axion-accent)]">{getFormattedCurrency()}</span>
             </div>
           </div>
         </div>

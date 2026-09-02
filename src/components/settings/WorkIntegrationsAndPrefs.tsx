@@ -89,7 +89,7 @@ export default function WorkIntegrationsAndPrefs() {
     <div className="flex flex-col gap-6">
       {/* Action Toast Feedback */}
       {actionFeedback && (
-        <div className="p-3 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center justify-between animate-fadeIn">
+        <div className="p-3 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 text-xs font-mono text-[var(--axion-accent)] flex items-center justify-between animate-fadeIn">
           <span>{actionFeedback}</span>
           <span className="text-white/40 text-[10px]">Mock State Atualizado</span>
         </div>

@@ -70,7 +70,7 @@ export default function PersonalNavigation({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {SHORTCUT_CATEGORIES.map((cat, ci) => (
             <div key={ci} className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
-              <span className="text-[10px] font-mono tracking-widest text-[#00f0ff] uppercase">
+              <span className="text-[10px] font-mono tracking-widest text-[var(--axion-accent)] uppercase">
                 {cat.category}
               </span>
               
@@ -108,7 +108,7 @@ export default function PersonalNavigation({
 
         <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between text-xs text-white/40">
           <span>Pressione <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px] text-white">⌘</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px] text-white">/</kbd> em qualquer ecrã para abrir os atalhos.</span>
-          <span className="text-[#00f0ff]/70 font-mono text-[10px]">AXION KEYMAP v2.4</span>
+          <span className="text-[var(--axion-accent)]/70 font-mono text-[10px]">AXION KEYMAP v2.4</span>
         </div>
       </SettingsSection>
     </div>

@@ -180,7 +180,7 @@ export default function AccountSecurityDevices() {
                 key={dev.id}
                 className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
                   dev.isCurrent
-                    ? "bg-[#00f0ff]/[0.03] border-[#00f0ff]/20"
+                    ? "bg-[var(--axion-accent)]/[0.03] border-[var(--axion-accent)]/20"
                     : "bg-white/[0.02] border-white/[0.06]"
                 }`}
               >
@@ -197,7 +197,7 @@ export default function AccountSecurityDevices() {
                         {dev.name}
                       </span>
                       {dev.isCurrent && (
-                        <span className="text-[9px] font-mono text-[#00f0ff] bg-[#00f0ff]/10 px-2 py-0.2 rounded-full border border-[#00f0ff]/30">
+                        <span className="text-[9px] font-mono text-[var(--axion-accent)] bg-[var(--axion-accent)]/10 px-2 py-0.2 rounded-full border border-[var(--axion-accent)]/30">
                           Este Dispositivo
                         </span>
                       )}
@@ -258,7 +258,7 @@ export default function AccountSecurityDevices() {
           {filteredActivity.map((act) => (
             <div key={act.id} className="py-3 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-xs text-[#00f0ff] font-semibold min-w-[44px]">
+                <span className="font-mono text-xs text-[var(--axion-accent)] font-semibold min-w-[44px]">
                   {act.time}
                 </span>
                 <span className="text-xs text-white/80 font-sans tracking-wide">

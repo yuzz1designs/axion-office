@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Database, 
@@ -35,19 +35,40 @@ interface DatabaseScreenProps {
   onBackToOverview?: () => void;
 }
 
+interface CrmCompany {
+  id: string;
+  company: string;
+  website: string;
+  sector: string;
+  country: string;
+  city: string;
+  source: string;
+  idealFit: string;
+  priority: string;
+  owner: string;
+  leadStatus: string;
+  createdAt: string;
+  lastContact: string;
+  nextAction: string;
+  serviceInterest: string;
+  estimatedMonthlyValue: string;
+  notes: string;
+}
+
 interface DataRecord {
   id: string;
   code: string;
   name: string;
-  category: "Equipamentos" | "Infraestruturas" | "Manutenção" | "Licenças & Software" | "Fornecedores";
+  category: string;
   location: string;
   owner: string;
-  status: "Ativo" | "Em Manutenção" | "Pendente" | "Revisão Necessária";
+  status: string;
   cost: string;
   lastSync: string;
+  crm?: CrmCompany;
 }
 
-const INITIAL_RECORDS: DataRecord[] = [
+const LEGACY_RECORDS: DataRecord[] = [
   {
     id: "rec-001",
     code: "EQ-8902",
@@ -138,14 +159,18 @@ const INITIAL_RECORDS: DataRecord[] = [
   }
 ];
 
-const CATEGORIES = [
-  "Todas as Categorias",
-  "Equipamentos",
-  "Infraestruturas",
-  "Manutenção",
-  "Licenças & Software",
-  "Fornecedores"
-];
+const toDataRecord = (company: CrmCompany): DataRecord => ({
+  id: company.id,
+  code: company.id,
+  name: company.company,
+  category: company.sector || "Sem setor",
+  location: [company.city, company.country].filter(Boolean).join(" • ") || "Sem localização",
+  owner: company.owner || "Sem responsável",
+  status: company.leadStatus || "Sem estado",
+  cost: company.estimatedMonthlyValue || "—",
+  lastSync: company.lastContact || "Sem contacto",
+  crm: company,
+});
 
 export default function DatabaseScreen({
   accentColor = {
@@ -157,52 +182,104 @@ export default function DatabaseScreen({
   },
   onBackToOverview
 }: DatabaseScreenProps) {
-  const [records, setRecords] = useState<DataRecord[]>(INITIAL_RECORDS);
+  const [records, setRecords] = useState<DataRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todas as Categorias");
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState("Agora mesmo");
   const [selectedRecord, setSelectedRecord] = useState<DataRecord | null>(null);
   const [isNewRecordModalOpen, setIsNewRecordModalOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<CrmCompany | null>(null);
+  const [syncError, setSyncError] = useState("");
 
   // New Record Form State
   const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
-  const [newCategory, setNewCategory] = useState<DataRecord["category"]>("Equipamentos");
+  const [newCategory, setNewCategory] = useState<DataRecord["category"]>("Serviços locais");
   const [newLocation, setNewLocation] = useState("");
   const [newOwner, setNewOwner] = useState("Nelson Afonso");
   const [newCost, setNewCost] = useState("");
 
-  const handleSync = () => {
+  const handleSync = useCallback(async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    setSyncError("");
+    try {
+      const response = await fetch("/api/crm/companies");
+      const result = await response.json() as { companies?: CrmCompany[]; error?: string };
+      if (!response.ok || !result.companies) throw new Error(result.error || "Falha na sincronização");
+      setRecords(result.companies.map(toDataRecord));
+      setLastSyncTime(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }));
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Não foi possível sincronizar o CRM.");
+    } finally {
       setIsSyncing(false);
-      setLastSyncTime("Agora mesmo");
-    }, 1200);
-  };
+    }
+  }, []);
 
-  const handleAddRecord = (e: React.FormEvent) => {
+  useEffect(() => { void handleSync(); }, [handleSync]);
+
+  const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
 
-    const record: DataRecord = {
-      id: `rec-${Date.now()}`,
-      code: newCode || `AX-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: newName,
-      category: newCategory,
-      location: newLocation || "Edifício AXION HQ",
-      owner: newOwner || "Nelson Afonso",
-      status: "Ativo",
-      cost: newCost ? `€ ${newCost}` : "€ 0,00",
-      lastSync: "Agora mesmo"
+    const company: CrmCompany = {
+      id: newCode,
+      company: newName.trim(),
+      website: "",
+      sector: newCategory,
+      country: "Portugal",
+      city: newLocation.trim(),
+      source: "Dashboard AXION",
+      idealFit: "3",
+      priority: "Média",
+      owner: newOwner || "Nelson",
+      leadStatus: "Em pesquisa",
+      createdAt: new Date().toLocaleDateString("pt-PT"),
+      lastContact: "",
+      nextAction: "",
+      serviceInterest: "Website",
+      estimatedMonthlyValue: newCost,
+      notes: "Criado através da dashboard AXION",
     };
+    setIsSyncing(true);
+    setSyncError("");
+    try {
+      const response = await fetch("/api/crm/companies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(company) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível gravar no Google Sheets.");
+      setIsNewRecordModalOpen(false);
+      setNewCode(""); setNewName(""); setNewLocation(""); setNewCost("");
+      await handleSync();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Não foi possível gravar no Google Sheets.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
-    setRecords([record, ...records]);
-    setIsNewRecordModalOpen(false);
-    setNewCode("");
-    setNewName("");
-    setNewLocation("");
-    setNewCost("");
+  const categories = useMemo(() => ["Todas as Categorias", ...Array.from(new Set(records.map((record) => record.category))).sort()], [records]);
+
+  const handleSaveCompany = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingCompany?.company.trim()) return;
+    setIsSyncing(true);
+    setSyncError("");
+    try {
+      const response = await fetch(`/api/crm/companies/${encodeURIComponent(editingCompany.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingCompany),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o Google Sheets.");
+      setEditingCompany(null);
+      setSelectedRecord(null);
+      await handleSync();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Não foi possível atualizar o Google Sheets.");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const filteredRecords = useMemo(() => {
@@ -245,14 +322,24 @@ export default function DatabaseScreen({
           </div>
 
           <div className="flex items-center gap-2.5">
+            {selectedRecord?.crm && (
+              <button
+                type="button"
+                onClick={() => selectedRecord.crm && setEditingCompany({ ...selectedRecord.crm })}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <SlidersHorizontal size={13} />
+                <span>Editar empresa</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSync}
               disabled={isSyncing}
               className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
             >
-              <RefreshCw size={13} className={isSyncing ? "animate-spin text-[#00f0ff]" : "text-white/60"} />
-              <span>{isSyncing ? "A sincronizar..." : "Sincronizar Excel"}</span>
+              <RefreshCw size={13} className={isSyncing ? "animate-spin text-[var(--axion-accent)]" : "text-white/60"} />
+              <span>{isSyncing ? "A sincronizar..." : "Sincronizar CRM"}</span>
             </button>
 
             <button
@@ -282,22 +369,22 @@ export default function DatabaseScreen({
           >
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl md:text-3xl font-sans font-bold text-white tracking-tight uppercase">
-                BASE DE DADOS, <span className="text-white/70 font-normal">EXCEL DATA SYNC</span>
+                BASE DE DADOS, <span className="text-white/70 font-normal">GOOGLE SHEETS CRM</span>
               </h1>
               
               <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                CONEXÃO EXCEL ATIVA
+                {syncError ? "LIGAÇÃO INTERROMPIDA" : "SINCRONIZAÇÃO ATIVA"}
               </span>
 
               <span className="text-[10px] font-mono text-white/40 border border-white/10 px-2 py-0.5 rounded-full">
-                MS GRAPH API // SHAREPOINT
+                GOOGLE SHEETS API // BIDIRECIONAL
               </span>
             </div>
 
             <p className="text-xs md:text-sm text-white/70 font-sans flex items-center gap-2 flex-wrap">
               <FileSpreadsheet size={14} className="text-emerald-400 shrink-0" />
-              <span className="font-mono text-white/90">Livro_Operacional_AXION_2026.xlsx</span>
+              <span className="font-mono text-white/90">CRM — Empresas</span>
               <span className="text-white/30">•</span>
               <span className="text-white/50">Última sincronização: {lastSyncTime}</span>
               <span className="text-white/30">•</span>
@@ -336,7 +423,7 @@ export default function DatabaseScreen({
             placeholder="Pesquisar por código, designação, local ou responsável..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[#00f0ff] transition-colors"
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
           />
           {searchQuery && (
             <button
@@ -351,7 +438,7 @@ export default function DatabaseScreen({
 
         {/* Category selector */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {CATEGORIES.map((cat) => {
+              {categories.map((cat) => {
             const isSelected = selectedCategory === cat;
             return (
               <button
@@ -382,13 +469,13 @@ export default function DatabaseScreen({
             <thead>
               <tr className="border-b border-white/10 text-[10px] font-mono text-white/40 uppercase tracking-wider">
                 <th className="py-3 px-3 font-semibold">Cód. / Ref</th>
-                <th className="py-3 px-3 font-semibold">Designação do Registo</th>
-                <th className="py-3 px-3 font-semibold">Categoria</th>
-                <th className="py-3 px-3 font-semibold">Localização</th>
+                <th className="py-3 px-3 font-semibold">Empresa</th>
+                <th className="py-3 px-3 font-semibold">Setor</th>
+                <th className="py-3 px-3 font-semibold">Cidade / País</th>
                 <th className="py-3 px-3 font-semibold">Responsável</th>
                 <th className="py-3 px-3 font-semibold">Estado</th>
-                <th className="py-3 px-3 font-semibold text-right">Valor / Custo</th>
-                <th className="py-3 px-3 font-semibold text-right">Sincronizado</th>
+                <th className="py-3 px-3 font-semibold text-right">Valor mensal estimado</th>
+                <th className="py-3 px-3 font-semibold text-right">Último contacto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-sans text-xs">
@@ -415,7 +502,7 @@ export default function DatabaseScreen({
                       </td>
 
                       {/* Name */}
-                      <td className="py-3 px-3 font-medium text-white group-hover:text-[#00f0ff] transition-colors">
+                      <td className="py-3 px-3 font-medium text-white group-hover:text-[var(--axion-accent)] transition-colors">
                         {rec.name}
                       </td>
 
@@ -469,13 +556,63 @@ export default function DatabaseScreen({
         {/* Footer info strip */}
         <div className="flex items-center justify-between pt-4 border-t border-white/10 text-xs text-white/40">
           <div className="flex items-center gap-2">
-            <span>A mostrar {filteredRecords.length} de {records.length} registos da folha Excel</span>
+            <span>{syncError || `A mostrar ${filteredRecords.length} de ${records.length} empresas da folha CRM`}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-white/30">FORMATO: XLSX / CSV AUTO-SYNC</span>
+            <span className="text-[10px] font-mono text-white/30">FONTE: GOOGLE SHEETS API</span>
           </div>
         </div>
       </div>
+
+      {/* ================= EDIT COMPANY — WRITES BACK TO GOOGLE SHEETS ================= */}
+      <AnimatePresence>
+        {editingCompany && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-[#0c1017] border border-white/15 rounded-3xl p-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div>
+                  <span className="text-[10px] font-mono tracking-widest text-[var(--axion-accent)] uppercase">Google Sheets // {editingCompany.id}</span>
+                  <h3 className="mt-1 text-base font-bold text-white uppercase">Editar empresa no CRM</h3>
+                </div>
+                <button type="button" onClick={() => setEditingCompany(null)} className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10"><X size={17} /></button>
+              </div>
+
+              <form onSubmit={handleSaveCompany} className="mt-5 flex flex-col gap-5 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {([
+                    ["company", "Empresa"], ["website", "Website"], ["sector", "Setor"],
+                    ["country", "País"], ["city", "Cidade"], ["source", "Origem"],
+                    ["idealFit", "Adequação (1-5)"], ["priority", "Prioridade"], ["owner", "Responsável"],
+                    ["leadStatus", "Estado do Lead"], ["createdAt", "Data Criada"], ["lastContact", "Último Contacto"],
+                    ["nextAction", "Próxima Ação"], ["serviceInterest", "Serviço de Interesse"],
+                    ["estimatedMonthlyValue", "Valor Mensal Estimado (€)"],
+                  ] as Array<[keyof CrmCompany, string]>).map(([field, label]) => (
+                    <label key={field} className="flex flex-col gap-1.5 text-white/65">
+                      <span>{label}</span>
+                      <input
+                        value={editingCompany[field]}
+                        required={field === "company"}
+                        onChange={(event) => setEditingCompany((current) => current ? { ...current, [field]: event.target.value } : current)}
+                        className="px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white outline-none focus:border-[var(--axion-accent)]"
+                      />
+                    </label>
+                  ))}
+                  <label className="flex flex-col gap-1.5 text-white/65 sm:col-span-2 lg:col-span-3">
+                    <span>Notas</span>
+                    <textarea rows={3} value={editingCompany.notes} onChange={(event) => setEditingCompany((current) => current ? { ...current, notes: event.target.value } : current)} className="px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white outline-none resize-none focus:border-[var(--axion-accent)]" />
+                  </label>
+                </div>
+                <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <button type="button" onClick={() => setEditingCompany(null)} className="px-4 py-2.5 rounded-xl text-white/60 hover:text-white">Cancelar</button>
+                  <button type="submit" disabled={isSyncing} className="px-5 py-2.5 rounded-xl bg-[var(--axion-accent)] text-slate-950 font-bold hover:brightness-110 disabled:opacity-40">
+                    {isSyncing ? "A sincronizar..." : "Guardar no Google Sheets"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ================= NEW RECORD MODAL ================= */}
       <AnimatePresence>
@@ -491,7 +628,7 @@ export default function DatabaseScreen({
                 <div className="flex items-center gap-2.5">
                   <TableProperties size={18} style={{ color: accentColor.hex }} />
                   <h3 className="text-base font-bold text-white font-sans tracking-tight uppercase">
-                    NOVO REGISTO, <span className="text-white/70 font-normal">LIVRO OPERACIONAL</span>
+                    NOVA EMPRESA, <span className="text-white/70 font-normal">CRM GOOGLE SHEETS</span>
                   </h3>
                 </div>
                 <button
@@ -506,64 +643,65 @@ export default function DatabaseScreen({
               <form onSubmit={handleAddRecord} className="flex flex-col gap-4 text-xs font-sans">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-white/80 font-medium">Código / Referência</label>
+                    <label className="text-white/80 font-medium">ID da Empresa</label>
                     <input
                       type="text"
-                      placeholder="Ex: EQ-9940"
+                      placeholder="Automático (CP-021)"
                       value={newCode}
                       onChange={(e) => setNewCode(e.target.value)}
-                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-white/80 font-medium">Categoria</label>
+                    <label className="text-white/80 font-medium">Setor</label>
                     <select
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value as any)}
-                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                     >
-                      <option value="Equipamentos">Equipamentos</option>
-                      <option value="Infraestruturas">Infraestruturas</option>
-                      <option value="Manutenção">Manutenção</option>
-                      <option value="Licenças & Software">Licenças & Software</option>
-                      <option value="Fornecedores">Fornecedores</option>
+                      <option value="Serviços locais">Serviços locais</option>
+                      <option value="Imobiliário">Imobiliário</option>
+                      <option value="Restaurantes">Restaurantes</option>
+                      <option value="Moda/Beleza">Moda/Beleza</option>
+                      <option value="Saúde">Saúde</option>
+                      <option value="Tecnologia">Tecnologia</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-white/80 font-medium">Designação do Registo *</label>
+                  <label className="text-white/80 font-medium">Nome da Empresa *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Novo Sensor de Presença Ótico"
+                    placeholder="Ex: Empresa Exemplo Lda."
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                    className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-white/80 font-medium">Localização no Edifício</label>
+                    <label className="text-white/80 font-medium">Cidade</label>
                     <input
                       type="text"
-                      placeholder="Ex: Piso 2 • Sala de Formação"
+                      placeholder="Ex: Lisboa"
                       value={newLocation}
                       onChange={(e) => setNewLocation(e.target.value)}
-                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-white/80 font-medium">Custo Estimado (€)</label>
+                    <label className="text-white/80 font-medium">Valor Mensal Estimado (€)</label>
                     <input
                       type="text"
                       placeholder="Ex: 2.450,00"
                       value={newCost}
                       onChange={(e) => setNewCost(e.target.value)}
-                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white font-mono focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
                 </div>

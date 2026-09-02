@@ -26,6 +26,7 @@ import {
   SettingsButton,
   SettingsSelect
 } from "./SettingsControls";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 interface PersonalCommandCenterProps {
   settings: CommandCenterConfig;
@@ -36,6 +37,22 @@ export default function PersonalCommandCenter({
   settings,
   onChange,
 }: PersonalCommandCenterProps) {
+  const { language } = useLanguage();
+  const moduleLabel = (module: CommandCenterModuleItem) => {
+    if (language !== "pt") return module.label;
+    return ({
+      priorities: "Prioridades",
+      today: "Hoje",
+      meetings: "Reuniões",
+      "my-tasks": "As minhas tarefas",
+      projects: "Projetos",
+      briefing: "Briefing",
+      sales: "Vendas",
+      finance: "Finanças",
+      "team-activity": "Atividade da equipa",
+      "recent-activity": "Atividade recente",
+    } as Record<string, string>)[module.id] ?? module.label;
+  };
   const handleToggleModule = (moduleId: string) => {
     const updated = settings.modules.map((m) => {
       if (m.id === moduleId) {
@@ -77,7 +94,7 @@ export default function PersonalCommandCenter({
             icon={RotateCcw}
             onClick={handleResetDefault}
           >
-            Reset to AXION Default
+            {language === "pt" ? "Repor predefinição AXION" : "Reset to AXION Default"}
           </SettingsButton>
         }
       >
@@ -109,7 +126,7 @@ export default function PersonalCommandCenter({
                       onClick={() => handleToggleModule(mod.id)}
                       className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-all cursor-pointer ${
                         mod.visible
-                          ? "bg-[#00f0ff] border-[#00f0ff] text-[#050609]"
+                          ? "bg-[var(--axion-accent)] border-[var(--axion-accent)] text-[#050609]"
                           : "border-white/20 hover:border-white/40"
                       }`}
                     >
@@ -119,7 +136,7 @@ export default function PersonalCommandCenter({
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-sans font-medium text-white tracking-wide">
-                          {mod.label}
+                          {moduleLabel(mod)}
                         </span>
                         {mod.isCore && (
                           <span className="text-[9px] font-mono text-white/40 bg-white/5 px-1.5 py-0.2 rounded">
@@ -128,7 +145,7 @@ export default function PersonalCommandCenter({
                         )}
                       </div>
                       <span className="text-[10px] font-mono text-white/40">
-                        Categoria: {mod.category}
+                          {language === "pt" ? "Categoria" : "Category"}: {mod.category}
                       </span>
                     </div>
                   </div>
@@ -162,7 +179,7 @@ export default function PersonalCommandCenter({
 
           {/* Live Mini Preview of Command Center Layout (Right 5 cols) */}
           <div className="lg:col-span-5 flex flex-col gap-3">
-            <span className="text-[11px] font-mono tracking-wider text-[#00f0ff] uppercase">
+            <span className="text-[11px] font-mono tracking-wider text-[var(--axion-accent)] uppercase">
               PREVIEW DA DASHBOARD
             </span>
 
@@ -170,7 +187,7 @@ export default function PersonalCommandCenter({
               {/* Header simulator */}
               <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#00f0ff] animate-ping" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--axion-accent)] animate-ping" />
                   <span className="text-[9px] font-mono text-white/70">AXION OFFICE</span>
                 </div>
                 <span className="text-[9px] font-mono text-white/40">23:45</span>
@@ -189,7 +206,7 @@ export default function PersonalCommandCenter({
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-sans font-semibold text-white/90 truncate">
-                          {m.label}
+                          {moduleLabel(m)}
                         </span>
                         <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
                       </div>

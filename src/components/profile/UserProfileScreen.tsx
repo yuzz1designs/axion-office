@@ -30,6 +30,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { AccentColorOption } from "../../types/settings";
+import { CURRENT_USER } from "../../data/currentUser";
 
 interface UserProfileScreenProps {
   accentColor?: AccentColorOption;
@@ -62,7 +63,7 @@ const INITIAL_PROFILE: UserProfileData = {
   deskLocation: "Edifício AXION HQ • Piso 3 • Gabinete Executivo 01",
   timezone: "Europe/Lisbon (WET, UTC+0)",
   bio: "Liderança de arquitetura digital, desenvolvimento de ecossistemas inteligentes e orquestração de operações corporativas AXION.",
-  passkeyId: "AX-PASSKEY-8942-FIDO2",
+  passkeyId: CURRENT_USER.axPasskey,
   avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80"
 };
 
@@ -370,7 +371,7 @@ export default function UserProfileScreen({
                     type="text"
                     value={profile.fullName}
                     onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                 </div>
               </div>
@@ -386,7 +387,7 @@ export default function UserProfileScreen({
                     type="text"
                     value={profile.displayName}
                     onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                 </div>
               </div>
@@ -403,14 +404,14 @@ export default function UserProfileScreen({
                     value={profile.roleTitle}
                     onChange={(e) => setProfile({ ...profile, roleTitle: e.target.value })}
                     placeholder="Cargo"
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                   <input
                     type="text"
                     value={profile.department}
                     onChange={(e) => setProfile({ ...profile, department: e.target.value })}
                     placeholder="Departamento"
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                 </div>
               </div>
@@ -426,13 +427,13 @@ export default function UserProfileScreen({
                     type="email"
                     value={profile.email}
                     onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                   <input
                     type="tel"
                     value={profile.phone}
                     onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                 </div>
               </div>
@@ -448,7 +449,7 @@ export default function UserProfileScreen({
                     type="text"
                     value={profile.deskLocation}
                     onChange={(e) => setProfile({ ...profile, deskLocation: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors"
+                    className="w-full px-3.5 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
                   />
                 </div>
               </div>
@@ -464,7 +465,7 @@ export default function UserProfileScreen({
                     rows={3}
                     value={profile.bio}
                     onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[#00f0ff] transition-colors resize-none leading-relaxed"
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs font-sans focus:outline-none focus:border-[var(--axion-accent)] transition-colors resize-none leading-relaxed"
                   />
                 </div>
               </div>
@@ -482,7 +483,7 @@ export default function UserProfileScreen({
             >
               {ACCESS_PERMISSIONS.map((group, gi) => (
                 <div key={gi} className="flex flex-col gap-3">
-                  <span className="text-[10px] font-mono tracking-widest text-[#00f0ff] uppercase font-bold">
+                  <span className="text-[10px] font-mono tracking-widest text-[var(--axion-accent)] uppercase font-bold">
                     {group.category}
                   </span>
 
@@ -602,7 +603,7 @@ export default function UserProfileScreen({
                   className="py-3 flex items-center justify-between gap-4"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00f0ff] shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--axion-accent)] shrink-0" />
                     <span className="text-xs text-white/80 font-sans">
                       {act.action}
                     </span>

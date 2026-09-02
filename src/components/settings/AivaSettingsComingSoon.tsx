@@ -35,9 +35,9 @@ export default function AivaSettingsComingSoon() {
         description="Autonomous Intelligent Virtual Architect — O copiloto operacional inteligente da sua organização."
         badge="Brevemente"
       >
-        <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0c1322] to-[#070b12] border border-[#00f0ff]/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl relative overflow-hidden">
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0c1322] to-[#070b12] border border-[var(--axion-accent)]/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl relative overflow-hidden">
           <div className="flex items-start gap-4 z-10">
-            <div className="w-12 h-12 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 flex items-center justify-center text-[#00f0ff] shadow-lg shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 flex items-center justify-center text-[var(--axion-accent)] shadow-lg shrink-0">
               <Sparkles size={24} className="animate-pulse" />
             </div>
 
@@ -46,7 +46,7 @@ export default function AivaSettingsComingSoon() {
                 <span className="text-base font-bold text-white font-sans">
                   AIVA Copilot v1.0 Preview
                 </span>
-                <span className="text-[9px] font-mono tracking-widest uppercase bg-[#00f0ff]/20 text-[#00f0ff] px-2 py-0.5 rounded-full border border-[#00f0ff]/30">
+                <span className="text-[9px] font-mono tracking-widest uppercase bg-[var(--axion-accent)]/20 text-[var(--axion-accent)] px-2 py-0.5 rounded-full border border-[var(--axion-accent)]/30">
                   EM DESENVOLVIMENTO
                 </span>
               </div>
@@ -62,7 +62,7 @@ export default function AivaSettingsComingSoon() {
               onClick={() => setNotifyOnRelease(!notifyOnRelease)}
               className={`px-4 py-2.5 rounded-xl font-sans text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 notifyOnRelease 
-                  ? "bg-[#00f0ff] text-[#050609] shadow-lg shadow-[#00f0ff]/20" 
+                  ? "bg-[var(--axion-accent)] text-[#050609] shadow-lg shadow-[var(--axion-accent)]/20" 
                   : "bg-white/5 border border-white/10 text-white hover:bg-white/10"
               }`}
             >

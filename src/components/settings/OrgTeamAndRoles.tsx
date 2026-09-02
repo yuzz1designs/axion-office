@@ -52,7 +52,7 @@ export default function OrgTeamAndRoles() {
     <div className="flex flex-col gap-6">
       {/* Action Toast Feedback */}
       {toastMsg && (
-        <div className="p-3 rounded-2xl bg-[#00f0ff]/10 border border-[#00f0ff]/30 text-xs font-mono text-[#00f0ff] flex items-center justify-between animate-fadeIn">
+        <div className="p-3 rounded-2xl bg-[var(--axion-accent)]/10 border border-[var(--axion-accent)]/30 text-xs font-mono text-[var(--axion-accent)] flex items-center justify-between animate-fadeIn">
           <span>{toastMsg}</span>
           <span className="text-white/40 text-[10px]">Administração AXION</span>
         </div>
@@ -87,7 +87,7 @@ export default function OrgTeamAndRoles() {
               placeholder="Pesquisar por nome, email ou cargo..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#121824] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs md:text-sm text-white placeholder-white/30 outline-none focus:border-[#00f0ff] transition-colors"
+              className="w-full bg-[#121824] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs md:text-sm text-white placeholder-white/30 outline-none focus:border-[var(--axion-accent)] transition-colors"
             />
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function OrgTeamAndRoles() {
                     {/* User info */}
                     <td className="py-3.5 pr-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-mono text-xs text-[#00f0ff] font-semibold">
+                        <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-mono text-xs text-[var(--axion-accent)] font-semibold">
                           {mem.name.charAt(0)}
                         </div>
                         <div className="flex flex-col">

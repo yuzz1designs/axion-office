@@ -343,7 +343,7 @@ export default function DocumentRepositoryScreen({
             placeholder="Pesquisar documento, planta, contrato ou autor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[#00f0ff] transition-colors"
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[var(--axion-accent)] transition-colors"
           />
           {searchQuery && (
             <button
@@ -406,7 +406,7 @@ export default function DocumentRepositoryScreen({
 
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="text-xs font-semibold text-white font-sans group-hover:text-[#00f0ff] transition-colors cursor-pointer" onClick={() => setPreviewDoc(doc)}>
+                      <span className="text-xs font-semibold text-white font-sans group-hover:text-[var(--axion-accent)] transition-colors cursor-pointer" onClick={() => setPreviewDoc(doc)}>
                         {doc.title}
                       </span>
                       <span className="text-[10px] font-mono text-white/50 bg-white/5 px-2 py-0.2 rounded">
@@ -606,7 +606,7 @@ export default function DocumentRepositoryScreen({
                     placeholder="Ex: Relatorio_Trimestral_Energia_Q3.pdf"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                    className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                   />
                 </div>
 
@@ -616,7 +616,7 @@ export default function DocumentRepositoryScreen({
                     <select
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value as any)}
-                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                     >
                       <option value="Plantas & CAD">Plantas & CAD</option>
                       <option value="Contratos & Acordos">Contratos & Acordos</option>
@@ -631,7 +631,7 @@ export default function DocumentRepositoryScreen({
                     <select
                       value={newClearance}
                       onChange={(e) => setNewClearance(e.target.value as any)}
-                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff]"
+                      className="px-3 py-2 rounded-xl bg-[#121824] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)]"
                     >
                       <option value="Nível 5 Executivo">Nível 5 Executivo</option>
                       <option value="Confidencial">Confidencial</option>
@@ -648,7 +648,7 @@ export default function DocumentRepositoryScreen({
                     placeholder="Descrição do conteúdo e finalidade..."
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
-                    className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[#00f0ff] resize-none"
+                    className="px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white focus:outline-none focus:border-[var(--axion-accent)] resize-none"
                   />
                 </div>
 
@@ -660,7 +660,7 @@ export default function DocumentRepositoryScreen({
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                       <div 
-                        className="h-full bg-[#00f0ff] transition-all duration-300"
+                        className="h-full bg-[var(--axion-accent)] transition-all duration-300"
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>

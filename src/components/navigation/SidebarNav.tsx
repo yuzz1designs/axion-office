@@ -14,6 +14,7 @@ import {
   CreditCard
 } from "lucide-react";
 import { AccentColorOption } from "../../types/settings";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 export type NavTabId = "overview" | "clients" | "database" | "documents" | "calendar" | "payments" | "aiva" | "settings" | "profile";
 
@@ -61,6 +62,7 @@ export default function SidebarNav({
   },
   isLight = false
 }: SidebarNavProps) {
+  const { t } = useLanguage();
   const [currentTab, setCurrentTab] = useState<NavTabId>(activeTab);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
@@ -72,11 +74,21 @@ export default function SidebarNav({
   };
 
   const selected = onSelectTab ? activeTab : currentTab;
+  const translatedNavItems: NavItem[] = [
+    { id: "overview", label: t("nav.main"), sublabel: t("nav.overview"), icon: LayoutGrid },
+    { id: "clients", label: t("nav.clients"), sublabel: "Ecossistemas & CRM", icon: Users },
+    { id: "database", label: t("nav.database"), sublabel: t("nav.databaseSub"), icon: Database },
+    { id: "documents", label: t("nav.documents"), sublabel: t("nav.documentsSub"), icon: FolderArchive },
+    { id: "calendar", label: t("nav.calendar"), sublabel: t("nav.calendarSub"), icon: Calendar },
+    { id: "payments", label: t("nav.payments"), sublabel: t("nav.paymentsSub"), icon: CreditCard },
+    { id: "aiva", label: t("nav.aiva"), sublabel: t("nav.soon"), icon: Sparkles, badge: t("nav.soon").toUpperCase() },
+    { id: "settings", label: t("nav.settings"), sublabel: t("nav.settingsSub"), icon: Settings },
+  ];
 
   return (
     <nav
       id="floating-sidebar-nav"
-      aria-label="Navegação Principal"
+      aria-label={t("nav.aria")}
       className={`fixed left-3 md:left-5 top-4 bottom-4 w-16 md:w-[72px] backdrop-blur-2xl rounded-[32px] shadow-2xl flex flex-col items-center justify-between py-5 px-1.5 z-40 select-none transition-all duration-300 ${
         isLight 
           ? "bg-white/90 border border-slate-200/90 shadow-slate-300/40 text-slate-800" 
@@ -92,25 +104,14 @@ export default function SidebarNav({
           }`}
           title="Axion Office - Painel Principal"
         >
-          {/* Brand icon with subtle, balanced accent glow */}
-          <div className="relative flex items-center justify-center w-8 h-8">
-            <Sparkles 
-              className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:scale-110" 
-              style={{ 
-                color: selected === "overview" ? accentColor.hex : (isLight ? "#475569" : "rgba(255,255,255,0.7)"),
-                filter: selected === "overview" ? `drop-shadow(0 0 6px ${accentColor.hex})` : undefined
-              }}
-            />
-          </div>
-          
-          {/* Subtle brand text beneath */}
           <span 
-            className="text-[9px] font-sans font-medium tracking-widest uppercase transition-colors mt-0.5"
+            className="py-2 font-display text-[8px] font-semibold uppercase tracking-[0.18em] transition-all duration-300 group-hover:scale-105"
             style={{
-              color: selected === "overview" ? accentColor.hex : (isLight ? "#475569" : "rgba(255,255,255,0.7)")
+              color: selected === "overview" ? accentColor.hex : (isLight ? "#334155" : "rgba(255,255,255,0.76)"),
+              textShadow: selected === "overview" ? `0 0 8px ${accentColor.hex}70` : undefined,
             }}
           >
-            Axion
+            AXION
           </span>
         </button>
 
@@ -120,7 +121,7 @@ export default function SidebarNav({
 
       {/* ================= MIDDLE SECTION: NAVIGATION ICONS ================= */}
       <div className="flex flex-col items-center gap-2 w-full my-auto">
-        {NAV_ITEMS.map((item) => {
+        {translatedNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = selected === item.id;
           const isHovered = hoveredTab === item.id;
@@ -157,18 +158,31 @@ export default function SidebarNav({
                 )}
 
                 {/* Nav Icon with clean, subtle accent color when active */}
-                <Icon 
-                  size={20} 
-                  style={{
-                    color: isActive ? accentColor.hex : undefined,
-                    filter: isActive ? `drop-shadow(0 0 4px ${accentColor.hex}80)` : undefined,
-                  }}
-                  className={`transition-all duration-300 ${
-                    isActive 
-                      ? "scale-105" 
-                      : (isLight ? "group-hover:scale-105 group-hover:text-slate-900" : "group-hover:scale-105 group-hover:text-white")
-                  }`} 
-                />
+                {item.id === "aiva" ? (
+                  <span
+                    className={`font-display text-[7px] font-bold tracking-[0.12em] transition-all duration-300 ${isActive ? "scale-105" : "group-hover:scale-105"}`}
+                    style={{
+                      color: isActive ? accentColor.hex : undefined,
+                      textShadow: isActive ? `0 0 7px ${accentColor.hex}90` : undefined,
+                    }}
+                    aria-hidden="true"
+                  >
+                    AIVA
+                  </span>
+                ) : (
+                  <Icon 
+                    size={20} 
+                    style={{
+                      color: isActive ? accentColor.hex : undefined,
+                      filter: isActive ? `drop-shadow(0 0 4px ${accentColor.hex}80)` : undefined,
+                    }}
+                    className={`transition-all duration-300 ${
+                      isActive 
+                        ? "scale-105" 
+                        : (isLight ? "group-hover:scale-105 group-hover:text-slate-900" : "group-hover:scale-105 group-hover:text-white")
+                    }`} 
+                  />
+                )}
               </button>
 
               {/* Floating Tooltip with smooth entry */}

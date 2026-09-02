@@ -36,7 +36,7 @@ export const ACCENT_COLOR_OPTIONS: AccentColorOption[] = [
   { id: "axion-blue", name: "AXION Blue", hex: "#00f0ff", secondary: "#0284c7", glow: "rgba(0, 240, 255, 0.4)" },
   { id: "electric-blue", name: "Electric Blue", hex: "#3b82f6", secondary: "#1d4ed8", glow: "rgba(59, 130, 246, 0.4)" },
   { id: "violet", name: "Violet", hex: "#a855f7", secondary: "#7e22ce", glow: "rgba(168, 85, 247, 0.4)" },
-  { id: "cyan", name: "Cyan", hex: "#06b6d4", secondary: "#0891b2", glow: "rgba(6, 182, 212, 0.4)" },
+  { id: "red", name: "Vermelho", hex: "#ef4444", secondary: "#b91c1c", glow: "rgba(239, 68, 68, 0.4)" },
   { id: "silver", name: "Silver", hex: "#cbd5e1", secondary: "#64748b", glow: "rgba(203, 213, 225, 0.3)" },
   { id: "graphite", name: "Graphite", hex: "#64748b", secondary: "#334155", glow: "rgba(100, 116, 139, 0.3)" },
 ];
@@ -420,7 +420,7 @@ export const DEFAULT_ORG_BRANDING: OrgBrandingSettings = {
   workspaceName: "AXION HQ Global",
   defaultTheme: "dark",
   defaultAccent: "axion-blue",
-  allowedAccentColors: ["axion-blue", "electric-blue", "violet", "cyan", "silver", "graphite"],
+  allowedAccentColors: ["axion-blue", "electric-blue", "violet", "red", "silver", "graphite"],
   customFavicon: true,
   workspaceLogoVariant: "standard",
   defaultBackgroundTreatment: "deep-obsidian",

@@ -152,7 +152,7 @@ export default function WorkNotifications({ userRole = "founder" }: WorkNotifica
                         type="checkbox"
                         checked={cat.channelInApp}
                         onChange={() => toggleCategoryChannel(cat.id, "channelInApp")}
-                        className="rounded border-white/20 bg-white/5 text-[#00f0ff] focus:ring-0 cursor-pointer accent-[#00f0ff]"
+                        className="rounded border-white/20 bg-white/5 text-[var(--axion-accent)] focus:ring-0 cursor-pointer accent-[var(--axion-accent)]"
                       />
                     </td>
 
@@ -162,7 +162,7 @@ export default function WorkNotifications({ userRole = "founder" }: WorkNotifica
                         type="checkbox"
                         checked={cat.channelDesktop}
                         onChange={() => toggleCategoryChannel(cat.id, "channelDesktop")}
-                        className="rounded border-white/20 bg-white/5 text-[#00f0ff] focus:ring-0 cursor-pointer accent-[#00f0ff]"
+                        className="rounded border-white/20 bg-white/5 text-[var(--axion-accent)] focus:ring-0 cursor-pointer accent-[var(--axion-accent)]"
                       />
                     </td>
 
@@ -172,7 +172,7 @@ export default function WorkNotifications({ userRole = "founder" }: WorkNotifica
                         type="checkbox"
                         checked={cat.channelEmail}
                         onChange={() => toggleCategoryChannel(cat.id, "channelEmail")}
-                        className="rounded border-white/20 bg-white/5 text-[#00f0ff] focus:ring-0 cursor-pointer accent-[#00f0ff]"
+                        className="rounded border-white/20 bg-white/5 text-[var(--axion-accent)] focus:ring-0 cursor-pointer accent-[var(--axion-accent)]"
                       />
                     </td>
 
@@ -182,7 +182,7 @@ export default function WorkNotifications({ userRole = "founder" }: WorkNotifica
                         type="checkbox"
                         checked={cat.channelDiscord}
                         onChange={() => toggleCategoryChannel(cat.id, "channelDiscord")}
-                        className="rounded border-white/20 bg-white/5 text-[#00f0ff] focus:ring-0 cursor-pointer accent-[#00f0ff]"
+                        className="rounded border-white/20 bg-white/5 text-[var(--axion-accent)] focus:ring-0 cursor-pointer accent-[var(--axion-accent)]"
                       />
                     </td>
 

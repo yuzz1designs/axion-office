@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Users, 
@@ -38,7 +38,6 @@ import {
   Share2,
   Building,
   Zap,
-  Activity,
   Check,
   FileCheck,
   BarChart3,
@@ -50,9 +49,13 @@ import {
   PieChart,
   Laptop,
   Gauge,
-  Rocket
+  Rocket,
+  Save,
+  Trash2,
+  KeyRound
 } from "lucide-react";
 import { AccentColorOption } from "../../types/settings";
+import { CURRENT_USER } from "../../data/currentUser";
 
 interface ClientsScreenProps {
   accentColor?: AccentColorOption;
@@ -115,7 +118,6 @@ export interface ClientRecord {
   contractRenewal: string;
   paymentTerms: string;
   ecosystemTags: string[];
-  ecosystemHealth: number; // 0-100%
   monthlyLeads: number;
   monthlyOrganicTraffic: string;
   averageRoas: string;
@@ -155,7 +157,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "15 Março 2027",
     paymentTerms: "30 Dias • Débito Direto SEPA",
     ecosystemTags: ["CRM HubSpot", "Next.js WebApp", "SEO Internacional", "Google Ads", "Automações N8N"],
-    ecosystemHealth: 98,
     monthlyLeads: 385,
     monthlyOrganicTraffic: "42.8K / mês",
     averageRoas: "5.4x ROAS",
@@ -254,7 +255,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "31 Dezembro 2027",
     paymentTerms: "15 Dias • SEPA",
     ecosystemTags: ["CRM Pipedrive", "Simulador Solar Web", "Meta Ads", "Instagram & LinkedIn", "Automações WhatsApp"],
-    ecosystemHealth: 96,
     monthlyLeads: 610,
     monthlyOrganicTraffic: "28.5K / mês",
     averageRoas: "4.8x ROAS",
@@ -351,7 +351,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "30 Novembro 2028",
     paymentTerms: "45 Dias • Transferência Bancária",
     ecosystemTags: ["Portal Científico", "SEO Multilingue", "LinkedIn Thought Leadership", "HubSpot CRM", "Hub de Publicações"],
-    ecosystemHealth: 99,
     monthlyLeads: 142,
     monthlyOrganicTraffic: "31.4K / mês",
     averageRoas: "N/A (B2B Authority)",
@@ -432,7 +431,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "30 Setembro 2026",
     paymentTerms: "30 Dias • SEPA",
     ecosystemTags: ["Website Minimalista", "Portal de Investidores", "Newsletter VIP", "LinkedIn Executivo", "CRM Custom"],
-    ecosystemHealth: 95,
     monthlyLeads: 58,
     monthlyOrganicTraffic: "12.2K / mês",
     averageRoas: "N/A (Deal Flow)",
@@ -504,7 +502,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "28 Fevereiro 2028",
     paymentTerms: "60 Dias • Faturação Pública",
     ecosystemTags: ["Academia E-Learning", "Google Ads Grants", "SEO Educacional", "Email Marketing", "Inscrições Online"],
-    ecosystemHealth: 97,
     monthlyLeads: 480,
     monthlyOrganicTraffic: "65.0K / mês",
     averageRoas: "6.2x ROI em inscrições",
@@ -576,7 +573,6 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     contractRenewal: "31 Julho 2027",
     paymentTerms: "30 Dias • Transferência Bancária",
     ecosystemTags: ["Website 3D Interativo", "YouTube & Meta Ads", "HubSpot Setup", "Discord Community", "Vídeos 3D"],
-    ecosystemHealth: 92,
     monthlyLeads: 215,
     monthlyOrganicTraffic: "18.6K / mês",
     averageRoas: "6.1x ROAS",
@@ -636,6 +632,8 @@ const INITIAL_CLIENTS: ClientRecord[] = [
     ]
   }
 ];
+
+const CLIENTS_STORAGE_KEY = "axion_office_clients";
 
 const SEGMENTS = [
   "Todos os Segmentos",
@@ -863,7 +861,14 @@ export default function ClientsScreen({
   },
   onBackToOverview
 }: ClientsScreenProps) {
-  const [clients, setClients] = useState<ClientRecord[]>(INITIAL_CLIENTS);
+  const [clients, setClients] = useState<ClientRecord[]>(() => {
+    try {
+      const storedClients = window.localStorage.getItem(CLIENTS_STORAGE_KEY);
+      return storedClients ? JSON.parse(storedClients) as ClientRecord[] : INITIAL_CLIENTS;
+    } catch {
+      return INITIAL_CLIENTS;
+    }
+  });
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -871,6 +876,18 @@ export default function ClientsScreen({
   const [activeDetailTab, setActiveDetailTab] = useState<"geral" | "metricas" | "stack" | "contactos" | "contratos" | "projetos" | "notas">("geral");
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [newNoteText, setNewNoteText] = useState("");
+  const [editingClient, setEditingClient] = useState<ClientRecord | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletePasskey, setDeletePasskey] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(clients));
+    } catch {
+      // The directory remains available in-memory when browser storage is blocked.
+    }
+  }, [clients]);
 
   // New Client Form State
   const [newClientName, setNewClientName] = useState("");
@@ -943,6 +960,50 @@ export default function ClientsScreen({
     setNewNoteText("");
   };
 
+  const handleOpenEditor = () => {
+    if (!selectedClient) return;
+    setEditingClient({
+      ...selectedClient,
+      ecosystemTags: [...selectedClient.ecosystemTags],
+      contacts: selectedClient.contacts.map((contact) => ({ ...contact })),
+    });
+  };
+
+  const updateEditingClient = <K extends keyof ClientRecord>(field: K, value: ClientRecord[K]) => {
+    setEditingClient((current) => current ? { ...current, [field]: value } : current);
+  };
+
+  const handleSaveClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient?.name.trim()) return;
+    setClients((current) => current.map((client) => (
+      client.id === editingClient.id
+        ? {
+            ...editingClient,
+            name: editingClient.name.trim(),
+            legalName: editingClient.legalName.trim(),
+            logoCode: editingClient.logoCode.trim() || editingClient.name.slice(0, 2).toUpperCase(),
+          }
+        : client
+    )));
+    setEditingClient(null);
+  };
+
+  const handleConfirmDelete = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!CURRENT_USER.hasAllPermissions || !selectedClient) return;
+    if (deletePasskey.trim() !== CURRENT_USER.axPasskey) {
+      setDeleteError("AX PASSKEY inválida. Confirma a credencial apresentada no teu perfil.");
+      return;
+    }
+
+    setClients((current) => current.filter((client) => client.id !== selectedClient.id));
+    setSelectedClientId(null);
+    setIsDeleteModalOpen(false);
+    setDeletePasskey("");
+    setDeleteError("");
+  };
+
   const handleCreateClient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClientName.trim()) return;
@@ -973,7 +1034,6 @@ export default function ClientsScreen({
       contractRenewal: "31 Agosto 2027",
       paymentTerms: "30 Dias • SEPA",
       ecosystemTags: newClientTags.split(",").map(t => t.trim()).filter(Boolean),
-      ecosystemHealth: 90,
       monthlyLeads: 120,
       monthlyOrganicTraffic: "15.0K / mês",
       averageRoas: "4.5x ROAS",
@@ -1067,7 +1127,7 @@ export default function ClientsScreen({
                     <span className="hidden sm:inline">Painel Geral</span>
                   </button>
                 )}
-                <span className="text-[11px] font-mono tracking-widest text-[#00f0ff] uppercase flex items-center gap-1.5">
+                <span className="text-[11px] font-mono tracking-widest text-[var(--axion-accent)] uppercase flex items-center gap-1.5">
                   <Workflow size={13} />
                   ECOSSISTEMAS DIGITAIS & CLIENTES
                 </span>
@@ -1109,7 +1169,7 @@ export default function ClientsScreen({
                 placeholder="Pesquisar por empresa, CRM, SEO, stack ou NIF..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[#00f0ff] transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[var(--axion-accent)] transition-all"
               />
               {searchQuery && (
                 <button
@@ -1168,7 +1228,7 @@ export default function ClientsScreen({
                         <CompanyBrandLogo client={client} size="lg" />
 
                         <div className="flex flex-col gap-0.5">
-                          <h2 className="text-base font-bold text-white font-sans tracking-tight group-hover:text-[#00f0ff] transition-colors">
+                          <h2 className="text-base font-bold text-white font-sans tracking-tight group-hover:text-[var(--axion-accent)] transition-colors">
                             {client.name}
                           </h2>
                           <span className="text-xs text-white/50 font-sans">
@@ -1213,7 +1273,7 @@ export default function ClientsScreen({
                     <div className="grid grid-cols-3 gap-2 py-2.5 px-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs">
                       <div className="flex flex-col">
                         <span className="text-[9px] font-mono text-white/40 uppercase flex items-center gap-1">
-                          <MousePointerClick size={10} className="text-[#00f0ff]" />
+                          <MousePointerClick size={10} className="text-[var(--axion-accent)]" />
                           Leads / Mês
                         </span>
                         <span className="font-mono font-bold text-white text-xs sm:text-sm">
@@ -1245,11 +1305,6 @@ export default function ClientsScreen({
                     {/* Bottom Row: Retainer + Ver Ficha Action */}
                     <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-white/60">
                       <div className="flex items-center gap-2 text-[11px] font-sans">
-                        <span className="flex items-center gap-1 text-emerald-400 font-mono">
-                          <Activity size={12} />
-                          Health: {client.ecosystemHealth}%
-                        </span>
-                        <span className="text-white/20">•</span>
                         <span className="text-white/50">
                           {client.projects.length} projetos ativos
                         </span>
@@ -1305,13 +1360,37 @@ export default function ClientsScreen({
             </button>
 
             <div className="flex items-center gap-2">
+              {CURRENT_USER.hasAllPermissions && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleOpenEditor}
+                    className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <Edit3 size={14} />
+                    <span>Editar Ficha</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletePasskey("");
+                      setDeleteError("");
+                      setIsDeleteModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-red-500/[0.06] hover:bg-red-500/15 text-red-300 hover:text-red-200 text-xs font-sans border border-red-400/20 transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <Trash2 size={14} />
+                    <span className="hidden sm:inline">Excluir Ecossistema</span>
+                  </button>
+                </>
+              )}
               <a
                 href={selectedClient.website}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/80 hover:text-white text-xs font-sans border border-white/10 transition-all cursor-pointer flex items-center gap-2"
               >
-                <Globe size={14} className="text-[#00f0ff]" />
+                <Globe size={14} className="text-[var(--axion-accent)]" />
                 <span className="hidden sm:inline">Visitar Website</span>
                 <ExternalLink size={12} className="text-white/40" />
               </a>
@@ -1372,7 +1451,7 @@ export default function ClientsScreen({
 
                   <div className="flex items-center gap-4 text-xs text-white/50 font-sans mt-2 flex-wrap">
                     <span className="flex items-center gap-1.5">
-                      <Globe size={13} className="text-[#00f0ff]" />
+                      <Globe size={13} className="text-[var(--axion-accent)]" />
                       {selectedClient.website.replace("https://", "")}
                     </span>
                     <span>•</span>
@@ -1398,7 +1477,7 @@ export default function ClientsScreen({
                 <div className="w-[1px] h-8 bg-white/10" />
                 <div className="flex flex-col">
                   <span className="text-[10px] font-mono text-white/40 uppercase">Media Spend</span>
-                  <span className="text-sm md:text-base font-bold text-[#00f0ff] font-mono">{selectedClient.adSpendManaged.split("/")[0]}</span>
+                  <span className="text-sm md:text-base font-bold text-[var(--axion-accent)] font-mono">{selectedClient.adSpendManaged.split("/")[0]}</span>
                 </div>
               </div>
             </div>
@@ -1445,7 +1524,7 @@ export default function ClientsScreen({
                 {/* Resumo Estratégico & Escopo */}
                 <div className="md:col-span-2 p-6 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col gap-4">
                   <span className="text-[11px] font-mono tracking-wider text-white/40 uppercase font-semibold flex items-center gap-2">
-                    <Sparkles size={14} className="text-[#00f0ff]" />
+                    <Sparkles size={14} className="text-[var(--axion-accent)]" />
                     Estratégia Digital & Posicionamento
                   </span>
                   
@@ -1505,7 +1584,7 @@ export default function ClientsScreen({
                           className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <FileText size={15} className="text-[#00f0ff] shrink-0" />
+                            <FileText size={15} className="text-[var(--axion-accent)] shrink-0" />
                             <div className="flex flex-col min-w-0">
                               <span className="text-xs text-white font-medium truncate">{doc.name}</span>
                               <span className="text-[10px] font-mono text-white/40">{doc.size}</span>
@@ -1532,7 +1611,7 @@ export default function ClientsScreen({
                   <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-white/50 font-sans">Leads Geradas</span>
-                      <MousePointerClick size={16} className="text-[#00f0ff]" />
+                      <MousePointerClick size={16} className="text-[var(--axion-accent)]" />
                     </div>
                     <div className="flex flex-col">
                       <span className="text-2xl md:text-3xl font-bold font-mono text-white">
@@ -1597,14 +1676,14 @@ export default function ClientsScreen({
                 {/* Detalhe de Canais de Tráfego e Conversão */}
                 <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col gap-4">
                   <span className="text-xs font-mono uppercase tracking-wider text-white/40 font-semibold flex items-center gap-2">
-                    <Gauge size={14} className="text-[#00f0ff]" />
+                    <Gauge size={14} className="text-[var(--axion-accent)]" />
                     Distribuição dos Canais de Aquisição & Conversão
                   </span>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                     <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col gap-2">
                       <span className="text-xs font-bold text-white flex items-center gap-2">
-                        <Globe size={14} className="text-[#00f0ff]" />
+                        <Globe size={14} className="text-[var(--axion-accent)]" />
                         SEO & Busca Orgânica
                       </span>
                       <p className="text-xs text-white/60">
@@ -1671,7 +1750,7 @@ export default function ClientsScreen({
 
                       <div className="flex items-center justify-between pt-3 border-t border-white/5 text-xs">
                         <div className="flex items-center gap-2 text-white/70">
-                          <Laptop size={13} className="text-[#00f0ff]" />
+                          <Laptop size={13} className="text-[var(--axion-accent)]" />
                           <span className="font-mono">{item.tool}</span>
                         </div>
                         <span className="font-mono font-bold text-emerald-400">{item.metric}</span>
@@ -1708,7 +1787,7 @@ export default function ClientsScreen({
                     </div>
 
                     {proj.kpiHighlight && (
-                      <div className="text-xs text-[#00f0ff] font-sans flex items-center gap-1.5">
+                      <div className="text-xs text-[var(--axion-accent)] font-sans flex items-center gap-1.5">
                         <CheckCircle2 size={13} />
                         <span>{proj.kpiHighlight}</span>
                       </div>
@@ -1749,11 +1828,11 @@ export default function ClientsScreen({
                     </div>
 
                     <div className="flex flex-col gap-2 pt-3 border-t border-white/5 text-xs text-white/70">
-                      <a href={`mailto:${contact.email}`} className="flex items-center gap-2 hover:text-[#00f0ff] transition-colors">
+                      <a href={`mailto:${contact.email}`} className="flex items-center gap-2 hover:text-[var(--axion-accent)] transition-colors">
                         <Mail size={13} className="text-white/40" />
                         <span className="truncate">{contact.email}</span>
                       </a>
-                      <a href={`tel:${contact.phone}`} className="flex items-center gap-2 hover:text-[#00f0ff] transition-colors">
+                      <a href={`tel:${contact.phone}`} className="flex items-center gap-2 hover:text-[var(--axion-accent)] transition-colors">
                         <Phone size={13} className="text-white/40" />
                         <span>{contact.phone}</span>
                       </a>
@@ -1824,7 +1903,7 @@ export default function ClientsScreen({
                 {/* Form para Adicionar Nota */}
                 <form onSubmit={handleAddNote} className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col gap-3">
                   <span className="text-xs font-mono uppercase tracking-wider text-white/40 font-semibold flex items-center gap-2">
-                    <Edit3 size={14} className="text-[#00f0ff]" />
+                    <Edit3 size={14} className="text-[var(--axion-accent)]" />
                     Adicionar Registo de Alinhamento / Reunião
                   </span>
                   
@@ -1833,14 +1912,14 @@ export default function ClientsScreen({
                     placeholder="Registar nota estratégica, insights de campanhas, testes A/B ou pontos de reunião..."
                     value={newNoteText}
                     onChange={(e) => setNewNoteText(e.target.value)}
-                    className="w-full p-3.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[#00f0ff] transition-all resize-none"
+                    className="w-full p-3.5 rounded-xl bg-white/[0.03] border border-white/10 text-white text-xs font-sans placeholder:text-white/30 focus:outline-none focus:border-[var(--axion-accent)] transition-all resize-none"
                   />
 
                   <div className="flex justify-end">
                     <button
                       type="submit"
                       disabled={!newNoteText.trim()}
-                      className="px-4 py-2 rounded-xl bg-[#00f0ff] text-slate-950 font-bold text-xs font-sans hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
+                      className="px-4 py-2 rounded-xl bg-[var(--axion-accent)] text-slate-950 font-bold text-xs font-sans hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
                     >
                       Guardar Registo
                     </button>
@@ -1870,6 +1949,156 @@ export default function ClientsScreen({
         </motion.div>
       )}
 
+      {/* Modal administrativo: edição da ficha do cliente */}
+      <AnimatePresence>
+        {editingClient && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#0b0f19] border border-white/15 shadow-2xl"
+            >
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0b0f19]/95 px-6 py-5 backdrop-blur-xl">
+                <div>
+                  <span className="text-[10px] font-mono tracking-[0.25em] text-[var(--axion-accent)] uppercase">Gestão Administrativa</span>
+                  <h3 className="mt-1 text-lg font-bold text-white uppercase">Editar ficha do cliente</h3>
+                </div>
+                <button type="button" onClick={() => setEditingClient(null)} className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors" aria-label="Fechar editor">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveClient} className="flex flex-col gap-6 p-6 text-xs">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {([
+                    ["name", "Nome comercial", "text"],
+                    ["legalName", "Denominação legal", "text"],
+                    ["vatNumber", "NIF / VAT", "text"],
+                    ["industry", "Setor / Indústria", "text"],
+                    ["website", "Website", "url"],
+                    ["generalEmail", "E-mail geral", "email"],
+                    ["generalPhone", "Telefone geral", "text"],
+                    ["headquarters", "Sede", "text"],
+                    ["clientSince", "Cliente desde", "text"],
+                    ["accountManager", "Account Manager", "text"],
+                    ["mrrValue", "MRR Retainer", "text"],
+                    ["arrValue", "ARR", "text"],
+                    ["adSpendManaged", "Media Spend", "text"],
+                    ["contractType", "Tipo de contrato", "text"],
+                    ["contractRenewal", "Renovação", "text"],
+                    ["paymentTerms", "Condições de pagamento", "text"],
+                  ] as Array<[keyof ClientRecord, string, string]>).map(([field, label, type]) => (
+                    <label key={field} className="flex flex-col gap-1.5 text-white/60">
+                      <span>{label}</span>
+                      <input
+                        type={type}
+                        value={String(editingClient[field])}
+                        onChange={(event) => updateEditingClient(field, event.target.value as never)}
+                        className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none transition-colors focus:border-[var(--axion-accent)]"
+                      />
+                    </label>
+                  ))}
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>Segmento</span>
+                    <select value={editingClient.segment} onChange={(event) => updateEditingClient("segment", event.target.value as ClientRecord["segment"])} className="rounded-xl border border-white/10 bg-[#0e1424] p-3 text-white outline-none focus:border-[var(--axion-accent)]">
+                      {SEGMENTS.filter((segment) => segment !== "Todos os Segmentos").map((segment) => <option key={segment} value={segment}>{segment}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>Estado</span>
+                    <select value={editingClient.status} onChange={(event) => updateEditingClient("status", event.target.value as ClientRecord["status"])} className="rounded-xl border border-white/10 bg-[#0e1424] p-3 text-white outline-none focus:border-[var(--axion-accent)]">
+                      {(["Ativo", "Em Onboarding", "Em Otimização", "Renovação"] as ClientRecord["status"][]).map((status) => <option key={status}>{status}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>Leads mensais</span>
+                    <input type="number" min="0" value={editingClient.monthlyLeads} onChange={(event) => updateEditingClient("monthlyLeads", Number(event.target.value))} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>Tráfego orgânico</span>
+                    <input value={editingClient.monthlyOrganicTraffic} onChange={(event) => updateEditingClient("monthlyOrganicTraffic", event.target.value)} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>ROAS médio</span>
+                    <input value={editingClient.averageRoas} onChange={(event) => updateEditingClient("averageRoas", event.target.value)} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60">
+                    <span>Taxa de conversão</span>
+                    <input value={editingClient.conversionRate} onChange={(event) => updateEditingClient("conversionRate", event.target.value)} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60 sm:col-span-2 lg:col-span-3">
+                    <span>Stack e canais (separados por vírgula)</span>
+                    <input value={editingClient.ecosystemTags.join(", ")} onChange={(event) => updateEditingClient("ecosystemTags", event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean))} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+
+                  <label className="flex flex-col gap-1.5 text-white/60 sm:col-span-2 lg:col-span-3">
+                    <span>Resumo executivo</span>
+                    <textarea rows={4} value={editingClient.executiveSummary} onChange={(event) => updateEditingClient("executiveSummary", event.target.value)} className="resize-none rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white outline-none focus:border-[var(--axion-accent)]" />
+                  </label>
+                </div>
+
+                <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-white/10 bg-[#0b0f19]/95 pt-5 backdrop-blur-xl">
+                  <button type="button" onClick={() => setEditingClient(null)} className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 transition-colors">Cancelar</button>
+                  <button type="submit" className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--axion-accent)] text-slate-950 font-bold hover:brightness-110 transition-all">
+                    <Save size={15} />
+                    Guardar alterações
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmação protegida da exclusão do ecossistema */}
+      <AnimatePresence>
+        {isDeleteModalOpen && selectedClient && CURRENT_USER.hasAllPermissions && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-md rounded-3xl border border-red-400/20 bg-[#0b0f19] p-6 shadow-2xl">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-3 text-red-300"><Trash2 size={21} /></div>
+                <div>
+                  <span className="text-[10px] font-mono tracking-[0.24em] text-red-300 uppercase">Operação irreversível</span>
+                  <h3 className="mt-1 text-lg font-bold text-white">Excluir ecossistema?</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-white/60">A ficha de <strong className="text-white">{selectedClient.name}</strong> e os respetivos dados locais serão eliminados.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleConfirmDelete} className="mt-6 flex flex-col gap-4">
+                <label className="flex flex-col gap-2 text-xs text-white/70">
+                  <span className="flex items-center gap-2"><KeyRound size={14} /> Introduz a tua AX PASSKEY para confirmar</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    autoFocus
+                    value={deletePasskey}
+                    onChange={(event) => { setDeletePasskey(event.target.value); setDeleteError(""); }}
+                    placeholder="AX-PASSKEY-••••-•••••"
+                    className={`rounded-xl border bg-white/[0.03] p-3 font-mono text-white outline-none ${deleteError ? "border-red-400/60" : "border-white/10 focus:border-red-400/50"}`}
+                  />
+                  {deleteError && <span className="flex items-center gap-1.5 text-[11px] text-red-300"><AlertCircle size={13} />{deleteError}</span>}
+                </label>
+
+                <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+                  <button type="button" onClick={() => { setIsDeleteModalOpen(false); setDeletePasskey(""); setDeleteError(""); }} className="px-4 py-2.5 rounded-xl bg-white/5 text-white/70 hover:bg-white/10 transition-colors">Cancelar</button>
+                  <button type="submit" disabled={!deletePasskey.trim()} className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 font-bold text-white transition-all hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-35">
+                    <Trash2 size={14} /> Excluir definitivamente
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ========================================================================= */}
       {/* MODAL: REGISTAR NOVO CLIENTE / ECOSSISTEMA DIGITAL                        */}
       {/* ========================================================================= */}
@@ -1884,7 +2113,7 @@ export default function ClientsScreen({
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div className="flex items-center gap-3">
-                  <Workflow size={20} className="text-[#00f0ff]" />
+                  <Workflow size={20} className="text-[var(--axion-accent)]" />
                   <h3 className="text-lg font-bold text-white font-sans tracking-tight uppercase">
                     NOVO ECOSSISTEMA, <span className="text-white/70 font-normal">REGISTO DE CLIENTE</span>
                   </h3>
@@ -1908,7 +2137,7 @@ export default function ClientsScreen({
                       placeholder="Ex: Solaris Tech Lda."
                       value={newClientName}
                       onChange={(e) => setNewClientName(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
 
@@ -1919,7 +2148,7 @@ export default function ClientsScreen({
                       placeholder="Ex: PT 512 345 678"
                       value={newClientVat}
                       onChange={(e) => setNewClientVat(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
                 </div>
@@ -1930,7 +2159,7 @@ export default function ClientsScreen({
                     <select
                       value={newClientSegment}
                       onChange={(e) => setNewClientSegment(e.target.value as any)}
-                      className="p-3 rounded-xl bg-[#0e1424] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-[#0e1424] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     >
                       <option value="Enterprise">Enterprise</option>
                       <option value="Scaleup">Scaleup</option>
@@ -1947,7 +2176,7 @@ export default function ClientsScreen({
                       placeholder="Ex: E-Commerce & Retalho"
                       value={newClientIndustry}
                       onChange={(e) => setNewClientIndustry(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
                 </div>
@@ -1960,7 +2189,7 @@ export default function ClientsScreen({
                       placeholder="Ex: 4500"
                       value={newClientMrr}
                       onChange={(e) => setNewClientMrr(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
 
@@ -1971,7 +2200,7 @@ export default function ClientsScreen({
                       placeholder="CRM HubSpot, Website Next.js, SEO, Meta Ads"
                       value={newClientTags}
                       onChange={(e) => setNewClientTags(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
                 </div>
@@ -1984,7 +2213,7 @@ export default function ClientsScreen({
                       placeholder="Nome do Diretor / CMO"
                       value={newClientContactName}
                       onChange={(e) => setNewClientContactName(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
 
@@ -1995,7 +2224,7 @@ export default function ClientsScreen({
                       placeholder="marketing@empresa.pt"
                       value={newClientEmail}
                       onChange={(e) => setNewClientEmail(e.target.value)}
-                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[#00f0ff]"
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/10 text-white font-sans focus:outline-none focus:border-[var(--axion-accent)]"
                     />
                   </div>
                 </div>
@@ -2010,7 +2239,7 @@ export default function ClientsScreen({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-[#00f0ff] text-slate-950 font-bold text-xs font-sans hover:brightness-110 transition-all shadow-lg"
+                    className="px-5 py-2.5 rounded-xl bg-[var(--axion-accent)] text-slate-950 font-bold text-xs font-sans hover:brightness-110 transition-all shadow-lg"
                   >
                     Criar Ecossistema
                   </button>
