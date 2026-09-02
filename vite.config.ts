@@ -4,6 +4,8 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import { handleAivaApi } from './src/server/aivaApi';
 import { handleGoogleSheetsApi } from './src/server/googleSheetsApi';
+import { handleGoogleDriveApi } from './src/server/googleDriveApi';
+import { handleGoogleOAuthApi } from './src/server/googleOAuthApi';
 
 export default defineConfig(({ mode }) => {
   const serverEnv = loadEnv(mode, process.cwd(), 'OPENAI_');
@@ -19,6 +21,8 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use((req, res, next) => void handleAivaApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleGoogleSheetsApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleGoogleDriveApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleGoogleOAuthApi(req, res, next));
         },
       },
     ],
