@@ -6,11 +6,13 @@ import { handleAivaApi } from './src/server/aivaApi';
 import { handleGoogleSheetsApi } from './src/server/googleSheetsApi';
 import { handleGoogleDriveApi } from './src/server/googleDriveApi';
 import { handleGoogleOAuthApi } from './src/server/googleOAuthApi';
+import { handleAuthApi } from './src/server/authApi';
 
 export default defineConfig(({ mode }) => {
   const serverEnv = loadEnv(mode, process.cwd(), 'OPENAI_');
   const googleEnv = loadEnv(mode, process.cwd(), 'GOOGLE_');
-  Object.assign(process.env, serverEnv, googleEnv);
+  const axionEnv = loadEnv(mode, process.cwd(), 'AXION_');
+  Object.assign(process.env, serverEnv, googleEnv, axionEnv);
   return {
     publicDir: 'assets',
     plugins: [
@@ -23,6 +25,7 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use((req, res, next) => void handleGoogleSheetsApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleGoogleDriveApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleGoogleOAuthApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleAuthApi(req, res, next));
         },
       },
     ],
