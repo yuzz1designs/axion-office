@@ -15,7 +15,7 @@ export class AuthProfileStore {
       const value = JSON.parse(readFileSync(this.filePath, "utf8"));
       return Array.isArray(value) ? value as UserProfile[] : [];
     } catch {
-      throw new Error("AXION_AUTH_PROFILES_INVALID");
+      throw new Error("AXION_PROFILES_INVALID");
     }
   }
 
@@ -24,8 +24,12 @@ export class AuthProfileStore {
     return this.readAll().find((profile) => profile.email === normalizedEmail) ?? null;
   }
 
+  findById(id: string) {
+    return this.readAll().find((profile) => profile.id === id) ?? null;
+  }
+
   upsert(profile: UserProfile) {
-    const profiles = this.readAll().filter((item) => item.email !== profile.email);
+    const profiles = this.readAll().filter((item) => item.id !== profile.id && item.email !== profile.email);
     profiles.push(profile);
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const temporaryPath = `${this.filePath}.tmp`;

@@ -13,28 +13,29 @@ import { ACCENT_COLOR_OPTIONS, DEFAULT_APPEARANCE, DEFAULT_COMMAND_CENTER, DEFAU
 import { LanguageProvider } from "./i18n/LanguageContext";
 
 interface AuthProfile {
+  id: string;
   email: string;
   name: string;
   role: string;
   phone: string;
+  avatarUrl: string;
   initials: string;
   accentColor: string;
+  axKey: string;
 }
 
 interface AuthStatus {
-  configured: boolean;
-  authenticated: boolean;
-  email?: string;
+  hasProfile: boolean;
   profile?: AuthProfile | null;
   profileRequired: boolean;
-  missingJoaoEmail?: boolean;
 }
 
 export default function App() {
   const [screen, setScreen] = useState<"welcome" | "command-center">("welcome");
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [authError, setAuthError] = useState("");
-  const [profileForm, setProfileForm] = useState({ name: "", role: "", phone: "", initials: "" });
+  const [profileForm, setProfileForm] = useState({ name: "", role: "", email: "", phone: "", initials: "", avatarUrl: "" });
+  const [createdAxKey, setCreatedAxKey] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Global Appearance State initialized from LocalStorage or Defaults
@@ -91,7 +92,7 @@ export default function App() {
   }, [languageRegion.language]);
 
   useEffect(() => {
-    fetch("/api/auth/status")
+    fetch("/api/profile/status")
       .then((response) => response.json())
       .then((status: AuthStatus) => {
         setAuthStatus(status);
@@ -99,8 +100,10 @@ export default function App() {
           setProfileForm({
             name: status.profile.name || "",
             role: status.profile.role || "",
+            email: status.profile.email || "",
             phone: status.profile.phone || "",
             initials: status.profile.initials || "",
+            avatarUrl: status.profile.avatarUrl || "",
           });
         }
       })
@@ -130,14 +133,15 @@ export default function App() {
     setIsSavingProfile(true);
     setAuthError("");
     try {
-      const response = await fetch("/api/auth/profile", {
+      const response = await fetch("/api/profile/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profileForm),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "PROFILE_FAILED");
-      setAuthStatus((current) => current ? { ...current, profile: result.profile, profileRequired: false } : current);
+      setCreatedAxKey(result.axKey || result.profile?.axKey || "");
+      setAuthStatus((current) => current ? { ...current, hasProfile: true, profile: result.profile, profileRequired: false } : current);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Não foi possível guardar o perfil.");
     } finally {
@@ -169,45 +173,50 @@ export default function App() {
     return authShell(<div className="grid h-full place-items-center text-sm text-white/60">A verificar acesso AXION...</div>);
   }
 
-  if (!authStatus.authenticated) {
-    const params = new URLSearchParams(window.location.search);
-    const authReason = params.get("auth");
+  if (screen === "command-center" && (authStatus.profileRequired || createdAxKey)) {
     return authShell(
       <div className="grid h-full place-items-center px-6">
-        <div className="w-full max-w-md rounded border border-white/10 bg-white/[0.04] p-8 shadow-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">AXION OFFICE</p>
-          <h1 className="mt-4 text-3xl font-bold text-white">Acesso autorizado</h1>
-          <p className="mt-3 text-sm leading-6 text-white/60">Entra com uma das contas Google autorizadas para usar o dashboard.</p>
-          {authReason === "unauthorized" && <p className="mt-4 rounded border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">Esta conta Google não está autorizada.</p>}
-          {!authStatus.configured && <p className="mt-4 rounded border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">Login ainda não configurado no servidor.</p>}
-          {authError && <p className="mt-4 text-sm text-red-200">{authError}</p>}
-          <a
-            href="/api/auth/start"
-            className="mt-6 flex h-11 items-center justify-center rounded bg-amber-300 px-4 text-sm font-bold text-black transition hover:bg-amber-200"
-          >
-            Entrar com Google
-          </a>
-          <p className="mt-4 text-xs text-white/40">Falta adicionar o email do João à lista de contas autorizadas.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (authStatus.profileRequired) {
-    return authShell(
-      <div className="grid h-full place-items-center px-6">
-        <form onSubmit={handleProfileSubmit} className="w-full max-w-lg rounded border border-white/10 bg-white/[0.04] p-8 shadow-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">{authStatus.email}</p>
-          <h1 className="mt-4 text-3xl font-bold text-white">Criar perfil</h1>
-          <div className="mt-6 grid gap-4">
-            <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Nome" value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} />
-            <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Função / cargo" value={profileForm.role} onChange={(event) => setProfileForm({ ...profileForm, role: event.target.value })} />
-            <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Telefone opcional" value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} />
-            <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Iniciais" value={profileForm.initials} onChange={(event) => setProfileForm({ ...profileForm, initials: event.target.value })} />
-          </div>
-          {authError && <p className="mt-4 text-sm text-red-200">{authError}</p>}
-          <button type="submit" disabled={isSavingProfile} className="mt-6 h-11 w-full rounded bg-amber-300 px-4 text-sm font-bold text-black transition hover:bg-amber-200 disabled:opacity-60">
-            {isSavingProfile ? "A guardar..." : "Guardar e entrar"}
+        <form onSubmit={handleProfileSubmit} className="w-full max-w-2xl rounded border border-white/10 bg-white/[0.04] p-8 shadow-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">AXION PROFILE</p>
+          <h1 className="mt-4 text-3xl font-bold text-white">{createdAxKey ? "Perfil criado" : "Criar o teu perfil"}</h1>
+          {!createdAxKey && (
+            <div className="mt-6 grid gap-4">
+              <div className="flex items-center gap-4">
+                <div className="grid h-20 w-20 place-items-center overflow-hidden rounded border border-white/10 bg-black/30 text-lg font-bold text-amber-100">
+                  {profileForm.avatarUrl ? <img src={profileForm.avatarUrl} alt="" className="h-full w-full object-cover" /> : profileForm.initials || "AX"}
+                </div>
+                <label className="cursor-pointer rounded border border-white/10 px-4 py-3 text-sm text-white/80 transition hover:border-amber-300">
+                  Mudar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setProfileForm((current) => ({ ...current, avatarUrl: String(reader.result || "") }));
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              </div>
+              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Nome" value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} />
+              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Função / cargo" value={profileForm.role} onChange={(event) => setProfileForm({ ...profileForm, role: event.target.value })} />
+              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Email associado" value={profileForm.email} onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })} />
+              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Telefone opcional" value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} />
+              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Iniciais" value={profileForm.initials} onChange={(event) => setProfileForm({ ...profileForm, initials: event.target.value })} />
+            </div>
+          )}
+          {authError && !createdAxKey && <p className="mt-4 text-sm text-red-200">{authError}</p>}
+          {createdAxKey && (
+            <div className="mt-5 rounded border border-amber-300/30 bg-amber-300/10 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/70">AX KEY</p>
+              <p className="mt-2 font-mono text-lg font-bold text-amber-100">{createdAxKey}</p>
+            </div>
+          )}
+          <button type={createdAxKey ? "button" : "submit"} onClick={createdAxKey ? () => setCreatedAxKey("") : undefined} disabled={isSavingProfile} className="mt-6 h-11 w-full rounded bg-amber-300 px-4 text-sm font-bold text-black transition hover:bg-amber-200 disabled:opacity-60">
+            {createdAxKey ? "Entrar no dashboard" : isSavingProfile ? "A guardar..." : "Guardar perfil"}
           </button>
         </form>
       </div>

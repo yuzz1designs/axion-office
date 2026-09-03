@@ -14,11 +14,6 @@ export interface GoogleOAuthTokens {
   scopes: string[];
 }
 
-export interface GoogleOAuthAccessToken {
-  accessToken: string;
-  scopes: string[];
-}
-
 type FetchImplementation = typeof fetch;
 
 export class GoogleOAuthClient {
@@ -54,18 +49,6 @@ export class GoogleOAuthClient {
     return {
       accessToken: result.access_token!,
       refreshToken: result.refresh_token,
-      scopes: (result.scope || "").split(/\s+/).filter(Boolean),
-    };
-  }
-
-  async exchangeAuthorizationCodeForAccess(code: string): Promise<GoogleOAuthAccessToken> {
-    const result = await this.requestToken({
-      code,
-      grant_type: "authorization_code",
-      redirect_uri: this.config.redirectUri,
-    });
-    return {
-      accessToken: result.access_token!,
       scopes: (result.scope || "").split(/\s+/).filter(Boolean),
     };
   }
