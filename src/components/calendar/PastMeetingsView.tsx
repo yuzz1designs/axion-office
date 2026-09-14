@@ -41,11 +41,13 @@ export default function PastMeetingsView({
 
   // Filter and sort meetings (past and completed meetings first, followed by recent ones)
   const pastMeetingsList = useMemo(() => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     // Merge events with their ATAs
     return events
       .map(event => {
         const ata = atas.find(a => a.eventId === event.id || a.id === event.discordAtaId);
-        const isPastOrToday = event.status === "completed" || event.date <= "2026-08-31";
+        const isPastOrToday = event.status === "completed" || event.date <= today;
         return {
           ...event,
           ata,

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import WelcomeScreen from "./components/welcome/WelcomeScreen";
@@ -11,39 +11,40 @@ import CommandCenter from "./components/command/CommandCenter";
 import { AppearanceSettings, CommandCenterConfig, LanguageRegionSettings } from "./types/settings";
 import { ACCENT_COLOR_OPTIONS, DEFAULT_APPEARANCE, DEFAULT_COMMAND_CENTER, DEFAULT_LANGUAGE_REGION } from "./data/settingsMockData";
 import { LanguageProvider } from "./i18n/LanguageContext";
-
-interface AuthProfile {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  phone: string;
-  avatarUrl: string;
-  initials: string;
-  accentColor: string;
-  axKey: string;
-}
+import type { AxionProfile } from "./types/profile";
+import AxionLoginScreen from "./components/auth/AxionLoginScreen";
+import { bridgeSupabaseSession, completeDesktopOAuthHandoff, getDesktopOAuthReturnState, hasSupabaseOAuthReturn, isAxionDesktop, shouldEnterAfterOAuth, signOutAxionSession, subscribeAxionRealtime, subscribeSupabaseSession, type SupabasePublicConfig } from "./lib/supabaseBrowser";
+import { normalizeAppearanceSettings } from "./lib/appearance";
+import { sanitizeCommandCenterConfig, sanitizeLanguageRegionSettings } from "./components/settings/settingsCore";
+import { AivaSessionProvider } from "./components/aiva/AivaSessionProvider";
 
 interface AuthStatus {
+  authConfigured?: boolean;
+  authRequired?: boolean;
   hasProfile: boolean;
-  profile?: AuthProfile | null;
+  profile?: AxionProfile | null;
   profileRequired: boolean;
+  currentDeviceId?: string;
 }
 
 export default function App() {
+  const desktop = isAxionDesktop(window.location.href);
+  const initialDesktopOAuthReturn = getDesktopOAuthReturnState(window.location.href);
+  const initialOAuthReturn = hasSupabaseOAuthReturn(window.location.href);
+  const [desktopOAuthReturn, setDesktopOAuthReturn] = useState(initialDesktopOAuthReturn);
+  const [oauthBootstrap, setOauthBootstrap] = useState(initialOAuthReturn);
+  const bootstrapStarted = useRef(false);
   const [screen, setScreen] = useState<"welcome" | "command-center">("welcome");
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
-  const [authError, setAuthError] = useState("");
-  const [profileForm, setProfileForm] = useState({ name: "", role: "", email: "", phone: "", initials: "", avatarUrl: "" });
-  const [createdAxKey, setCreatedAxKey] = useState("");
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [supabaseConfig, setSupabaseConfig] = useState<SupabasePublicConfig>({ configured: false });
+  const [desktopReturnStatus, setDesktopReturnStatus] = useState<"working" | "complete" | "error">("working");
 
   // Global Appearance State initialized from LocalStorage or Defaults
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
     try {
       const cached = localStorage.getItem("axion_office_appearance");
       if (cached) {
-        return JSON.parse(cached);
+        return normalizeAppearanceSettings(JSON.parse(cached));
       }
     } catch (e) {
       // Storage unavailable fallback
@@ -51,26 +52,26 @@ export default function App() {
     return DEFAULT_APPEARANCE;
   });
 
-  const isLight = appearance.theme === "light";
+  const isLight = false;
   const activeAccent = ACCENT_COLOR_OPTIONS.find((option) => option.id === appearance.accentColor) ?? ACCENT_COLOR_OPTIONS[0];
 
   const [commandCenterConfig, setCommandCenterConfig] = useState<CommandCenterConfig>(() => {
     try {
       const cached = localStorage.getItem("axion_office_command");
-      if (cached) return JSON.parse(cached);
+      if (cached) return sanitizeCommandCenterConfig(JSON.parse(cached));
     } catch (e) {
       // Storage unavailable fallback
     }
-    return DEFAULT_COMMAND_CENTER;
+    return sanitizeCommandCenterConfig(DEFAULT_COMMAND_CENTER);
   });
   const [languageRegion, setLanguageRegion] = useState<LanguageRegionSettings>(() => {
     try {
       const cached = localStorage.getItem("axion_office_language");
-      if (cached) return JSON.parse(cached);
+      if (cached) return sanitizeLanguageRegionSettings(JSON.parse(cached));
     } catch (e) {
       // Storage unavailable fallback
     }
-    return DEFAULT_LANGUAGE_REGION;
+    return sanitizeLanguageRegionSettings(DEFAULT_LANGUAGE_REGION);
   });
   const [isLanguageTransitioning, setIsLanguageTransitioning] = useState(false);
 
@@ -91,24 +92,57 @@ export default function App() {
     document.documentElement.lang = languageRegion.language === "pt" ? "pt-PT" : "en-US";
   }, [languageRegion.language]);
 
+  const refreshAuthStatus = async () => {
+    const response = await fetch("/api/profile/status");
+    setAuthStatus(await response.json());
+  };
+
   useEffect(() => {
-    fetch("/api/profile/status")
-      .then((response) => response.json())
-      .then((status: AuthStatus) => {
-        setAuthStatus(status);
-        if (status.profile) {
-          setProfileForm({
-            name: status.profile.name || "",
-            role: status.profile.role || "",
-            email: status.profile.email || "",
-            phone: status.profile.phone || "",
-            initials: status.profile.initials || "",
-            avatarUrl: status.profile.avatarUrl || "",
-          });
+    if (bootstrapStarted.current) return;
+    bootstrapStarted.current = true;
+    const bootstrap = async () => {
+      try {
+        const oauthReturn = hasSupabaseOAuthReturn(window.location.href);
+        const configResponse = await fetch("/api/auth/config");
+        const config = await configResponse.json() as SupabasePublicConfig;
+        setSupabaseConfig(config);
+        let handoffState = desktopOAuthReturn;
+        if (!desktop && oauthReturn && !handoffState) {
+          const pendingResponse = await fetch("/api/auth/desktop/pending");
+          const pending = await pendingResponse.json() as { state?: string | null };
+          handoffState = pending.state || null;
+          if (handoffState) setDesktopOAuthReturn(handoffState);
         }
-      })
-      .catch(() => setAuthError("Não foi possível verificar o login."));
+        if (handoffState) {
+          const complete = config.configured && await completeDesktopOAuthHandoff(config, window.location.href, handoffState);
+          setDesktopReturnStatus(complete ? "complete" : "error");
+          if (complete) window.setTimeout(() => window.location.assign(`axion-office://auth/callback?state=${encodeURIComponent(handoffState)}`), 100);
+          return;
+        }
+        const sessionBridged = config.configured ? await bridgeSupabaseSession(config) : false;
+        await refreshAuthStatus();
+        if (shouldEnterAfterOAuth(oauthReturn, sessionBridged)) {
+          setScreen("command-center");
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        setOauthBootstrap(false);
+      } catch {
+        setOauthBootstrap(false);
+        setAuthStatus({ hasProfile: false, profile: null, profileRequired: true, authRequired: false });
+      }
+    };
+    void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!supabaseConfig.configured) return;
+    const stopSession = subscribeSupabaseSession(supabaseConfig, () => void refreshAuthStatus());
+    const stopRealtime = subscribeAxionRealtime(supabaseConfig, (table) => {
+      if (table === "profiles") void refreshAuthStatus();
+      window.dispatchEvent(new CustomEvent("axion:realtime", { detail: { table } }));
+    });
+    return () => { stopSession(); stopRealtime(); };
+  }, [supabaseConfig.configured, supabaseConfig.url, supabaseConfig.publishableKey]);
 
   const handleAppearanceChange = (updated: AppearanceSettings) => {
     setAppearance(updated);
@@ -128,100 +162,11 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handleProfileSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsSavingProfile(true);
-    setAuthError("");
-    try {
-      const response = await fetch("/api/profile/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileForm),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "PROFILE_FAILED");
-      setCreatedAxKey(result.axKey || result.profile?.axKey || "");
-      setAuthStatus((current) => current ? { ...current, hasProfile: true, profile: result.profile, profileRequired: false } : current);
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Não foi possível guardar o perfil.");
-    } finally {
-      setIsSavingProfile(false);
-    }
+  const handleSignOut = async () => {
+    await signOutAxionSession(supabaseConfig);
+    setAuthStatus({ authConfigured: supabaseConfig.configured, authRequired: supabaseConfig.configured, hasProfile: false, profile: null, profileRequired: true });
+    setScreen("welcome");
   };
-
-  const authShell = (children: React.ReactNode) => (
-    <LanguageProvider language={languageRegion.language}>
-      <div
-        id="axion-office-application-root"
-        data-theme={isLight ? "light" : "dark"}
-        style={{
-          "--axion-accent": activeAccent.hex,
-          "--axion-accent-secondary": activeAccent.secondary,
-          "--axion-accent-glow": activeAccent.glow,
-          "--axion-accent-hover": `color-mix(in srgb, ${activeAccent.hex} 82%, white)`,
-        } as CSSProperties}
-        className={`relative w-screen h-screen overflow-hidden select-none transition-colors duration-500 ${
-          isLight ? "bg-[#ffffff] text-slate-900 theme-light" : "bg-[#050609] text-white"
-        }`}
-      >
-        {children}
-      </div>
-    </LanguageProvider>
-  );
-
-  if (!authStatus) {
-    return authShell(<div className="grid h-full place-items-center text-sm text-white/60">A verificar acesso AXION...</div>);
-  }
-
-  if (screen === "command-center" && (authStatus.profileRequired || createdAxKey)) {
-    return authShell(
-      <div className="grid h-full place-items-center px-6">
-        <form onSubmit={handleProfileSubmit} className="w-full max-w-2xl rounded border border-white/10 bg-white/[0.04] p-8 shadow-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">AXION PROFILE</p>
-          <h1 className="mt-4 text-3xl font-bold text-white">{createdAxKey ? "Perfil criado" : "Criar o teu perfil"}</h1>
-          {!createdAxKey && (
-            <div className="mt-6 grid gap-4">
-              <div className="flex items-center gap-4">
-                <div className="grid h-20 w-20 place-items-center overflow-hidden rounded border border-white/10 bg-black/30 text-lg font-bold text-amber-100">
-                  {profileForm.avatarUrl ? <img src={profileForm.avatarUrl} alt="" className="h-full w-full object-cover" /> : profileForm.initials || "AX"}
-                </div>
-                <label className="cursor-pointer rounded border border-white/10 px-4 py-3 text-sm text-white/80 transition hover:border-amber-300">
-                  Mudar foto
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => setProfileForm((current) => ({ ...current, avatarUrl: String(reader.result || "") }));
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                </label>
-              </div>
-              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Nome" value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} />
-              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Função / cargo" value={profileForm.role} onChange={(event) => setProfileForm({ ...profileForm, role: event.target.value })} />
-              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Email associado" value={profileForm.email} onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })} />
-              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Telefone opcional" value={profileForm.phone} onChange={(event) => setProfileForm({ ...profileForm, phone: event.target.value })} />
-              <input className="rounded border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-amber-300" placeholder="Iniciais" value={profileForm.initials} onChange={(event) => setProfileForm({ ...profileForm, initials: event.target.value })} />
-            </div>
-          )}
-          {authError && !createdAxKey && <p className="mt-4 text-sm text-red-200">{authError}</p>}
-          {createdAxKey && (
-            <div className="mt-5 rounded border border-amber-300/30 bg-amber-300/10 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/70">AX KEY</p>
-              <p className="mt-2 font-mono text-lg font-bold text-amber-100">{createdAxKey}</p>
-            </div>
-          )}
-          <button type={createdAxKey ? "button" : "submit"} onClick={createdAxKey ? () => setCreatedAxKey("") : undefined} disabled={isSavingProfile} className="mt-6 h-11 w-full rounded bg-amber-300 px-4 text-sm font-bold text-black transition hover:bg-amber-200 disabled:opacity-60">
-            {createdAxKey ? "Entrar no dashboard" : isSavingProfile ? "A guardar..." : "Guardar perfil"}
-          </button>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <LanguageProvider language={languageRegion.language}>
@@ -251,7 +196,15 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence mode="wait">
-        {screen === "welcome" ? (
+        {desktopOAuthReturn || oauthBootstrap ? (
+          <motion.div key="desktop-auth-return" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex items-center justify-center bg-[#050609] px-6">
+            <div className="max-w-md text-center">
+              <p className="text-[10px] font-mono tracking-[0.28em] text-white/35 uppercase">AXION OFFICE · Desktop</p>
+              <h1 className="mt-3 text-2xl font-semibold">{desktopReturnStatus === "working" ? "A concluir o login…" : desktopReturnStatus === "complete" ? "Login concluído" : "Não foi possível concluir o login"}</h1>
+              <p className="mt-3 text-sm text-white/45">{desktopReturnStatus === "complete" ? "A regressar à aplicação. Já podes fechar este separador." : desktopReturnStatus === "error" ? "Volta à aplicação e tenta novamente." : "A sessão está a ser transferida de forma segura para a aplicação."}</p>
+            </div>
+          </motion.div>
+        ) : screen === "welcome" ? (
           <motion.div
             key="welcome"
             initial={{ opacity: 1 }}
@@ -260,6 +213,10 @@ export default function App() {
             className="w-full h-full"
           >
             <WelcomeScreen onEnter={() => setScreen("command-center")} />
+          </motion.div>
+        ) : authStatus?.authRequired ? (
+          <motion.div key="axion-login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full h-full">
+            <AxionLoginScreen config={supabaseConfig} desktop={desktop} onAuthenticated={() => void refreshAuthStatus()} />
           </motion.div>
         ) : (
           <motion.div
@@ -270,15 +227,19 @@ export default function App() {
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
             className="w-full h-full"
           >
-            <CommandCenter 
+            <AivaSessionProvider><CommandCenter
               appearance={appearance}
               onAppearanceChange={handleAppearanceChange}
               commandCenterConfig={commandCenterConfig}
               onCommandCenterConfigChange={setCommandCenterConfig}
               languageRegion={languageRegion}
               onLanguageRegionChange={handleLanguageRegionChange}
-              onBackToWelcome={() => setScreen("welcome")} 
-            />
+              profile={authStatus?.profile ?? null}
+              profileRequired={authStatus?.profileRequired ?? false}
+              currentDeviceId={authStatus?.currentDeviceId}
+              onProfileSaved={(profile, currentDeviceId) => setAuthStatus({ hasProfile: true, profile, profileRequired: false, currentDeviceId })}
+              onBackToWelcome={() => void handleSignOut()}
+            /></AivaSessionProvider>
           </motion.div>
         )}
       </AnimatePresence>

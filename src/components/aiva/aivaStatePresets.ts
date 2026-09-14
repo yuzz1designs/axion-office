@@ -21,7 +21,7 @@ export function getAivaStatePresets(accent: string): Record<AivaVisualState, Aiv
       description: "A escutar",
     },
     thinking: {
-      color: "#9d7cff",
+      color: accent,
       glow: 1.05,
       motion: 1.15,
       turbulence: 0.92,
@@ -39,7 +39,7 @@ export function getAivaStatePresets(accent: string): Record<AivaVisualState, Aiv
       description: "A responder",
     },
     success: {
-      color: "#42e8b4",
+      color: accent,
       glow: 1.25,
       motion: 0.26,
       turbulence: 0.46,
@@ -48,7 +48,7 @@ export function getAivaStatePresets(accent: string): Record<AivaVisualState, Aiv
       description: "Ação concluída",
     },
     warning: {
-      color: "#ffb94d",
+      color: accent,
       glow: 1.05,
       motion: 0.62,
       turbulence: 0.78,
@@ -57,7 +57,7 @@ export function getAivaStatePresets(accent: string): Record<AivaVisualState, Aiv
       description: "Requer atenção",
     },
     error: {
-      color: "#ff4d73",
+      color: accent,
       glow: 1.2,
       motion: 1.35,
       turbulence: 1.1,

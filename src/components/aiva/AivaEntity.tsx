@@ -2,12 +2,15 @@ import { motion } from "motion/react";
 import type { CSSProperties } from "react";
 import type { AudioLevelRef, AivaVisualState } from "./aivaVisual.types";
 import AivaParticleScene from "./AivaParticleScene";
+import type { AivaBrainId } from "../../lib/aivaBrain";
 
 interface AivaEntityProps {
   state: AivaVisualState;
   accentColor: string;
   audioLevel: AudioLevelRef;
   reducedMotion: boolean;
+  brain: AivaBrainId;
+  executing: boolean;
 }
 
 export default function AivaEntity(props: AivaEntityProps) {

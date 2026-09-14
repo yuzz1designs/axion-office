@@ -15,8 +15,9 @@ import {
 } from "lucide-react";
 import { AccentColorOption } from "../../types/settings";
 import { useLanguage } from "../../i18n/LanguageContext";
+import type { AxionProfile } from "../../types/profile";
 
-export type NavTabId = "overview" | "clients" | "database" | "documents" | "calendar" | "payments" | "aiva" | "settings" | "profile";
+export type NavTabId = "overview" | "clients" | "database" | "documents" | "calendar" | "payments" | "aiva" | "settings" | "profile" | "notifications";
 
 interface NavItem {
   id: NavTabId;
@@ -31,9 +32,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "clients", label: "Clientes", sublabel: "Ecossistemas & CRM", icon: Users },
   { id: "database", label: "Base de Dados", sublabel: "Excel Data Sync", icon: Database },
   { id: "documents", label: "Depósito de Documentos", sublabel: "Vault Digital", icon: FolderArchive },
-  { id: "calendar", label: "Agenda & Reuniões", sublabel: "Google & Discord Sync", icon: Calendar },
-  { id: "payments", label: "Pagamentos", sublabel: "Tesouraria & SaaS", icon: CreditCard },
-  { id: "aiva", label: "AIVA Intelligence", sublabel: "Brevemente", icon: Sparkles, badge: "BREVEMENTE" },
+  { id: "calendar", label: "Agenda & Reuniões", sublabel: "Google Calendar & Tasks", icon: Calendar },
+  { id: "payments", label: "Financeiro", sublabel: "Despesas & Pagamentos", icon: CreditCard },
+  { id: "aiva", label: "AIVA Intelligence", sublabel: "Assistente Operacional", icon: Sparkles },
   { id: "settings", label: "Definições", sublabel: "Configurações", icon: Settings },
 ];
 
@@ -43,6 +44,8 @@ interface SidebarNavProps {
   unreadNotifications?: number;
   onOpenNotifications?: () => void;
   onOpenProfile?: () => void;
+  profile?: AxionProfile | null;
+  profileRequired?: boolean;
   accentColor?: AccentColorOption;
   isLight?: boolean;
 }
@@ -50,9 +53,11 @@ interface SidebarNavProps {
 export default function SidebarNav({
   activeTab = "overview",
   onSelectTab,
-  unreadNotifications = 2,
+  unreadNotifications = 0,
   onOpenNotifications,
   onOpenProfile,
+  profile,
+  profileRequired = false,
   accentColor = {
     id: "axion-blue",
     name: "AXION Blue",
@@ -62,7 +67,7 @@ export default function SidebarNav({
   },
   isLight = false
 }: SidebarNavProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [currentTab, setCurrentTab] = useState<NavTabId>(activeTab);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
@@ -81,7 +86,7 @@ export default function SidebarNav({
     { id: "documents", label: t("nav.documents"), sublabel: t("nav.documentsSub"), icon: FolderArchive },
     { id: "calendar", label: t("nav.calendar"), sublabel: t("nav.calendarSub"), icon: Calendar },
     { id: "payments", label: t("nav.payments"), sublabel: t("nav.paymentsSub"), icon: CreditCard },
-    { id: "aiva", label: t("nav.aiva"), sublabel: t("nav.soon"), icon: Sparkles, badge: t("nav.soon").toUpperCase() },
+    { id: "aiva", label: t("nav.aiva"), sublabel: language === "pt" ? "Assistente Operacional" : "Operational Assistant", icon: Sparkles },
     { id: "settings", label: t("nav.settings"), sublabel: t("nav.settingsSub"), icon: Settings },
   ];
 
@@ -242,6 +247,7 @@ export default function SidebarNav({
             onClick={onOpenNotifications}
             onMouseEnter={() => setHoveredTab("notifications")}
             onMouseLeave={() => setHoveredTab(null)}
+            style={selected === "notifications" ? { color: accentColor.hex, borderColor: `${accentColor.hex}50`, backgroundColor: `${accentColor.hex}15` } : undefined}
             className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer outline-none group border ${
               isLight 
                 ? "bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-950 hover:bg-slate-200" 
@@ -253,9 +259,8 @@ export default function SidebarNav({
             
             {/* Unread Alert Red Dot Badge */}
             {unreadNotifications > 0 && (
-              <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                <span className={`relative inline-flex rounded-full h-2 w-2 bg-rose-500 ring-2 ${isLight ? "ring-white" : "ring-[#0c1017]"}`} />
+              <span className={`absolute -right-1.5 -top-1.5 flex min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 py-0.5 text-[8px] font-bold leading-none text-white ring-2 ${isLight ? "ring-white" : "ring-[#0c1017]"}`}>
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
               </span>
             )}
           </button>
@@ -311,20 +316,15 @@ export default function SidebarNav({
             }}
             aria-label="Perfil do Utilizador"
           >
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80"
-              alt="Nelson Afonso"
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-              onError={(e) => {
-                (e.target as HTMLElement).style.display = "none";
-              }}
-            />
-            {/* Fallback Initials */}
-            <div className={`w-full h-full flex items-center justify-center text-xs font-semibold ${
-              isLight ? "bg-slate-200 text-slate-800" : "bg-gradient-to-tr from-[#1a2333] to-[#24334a] text-white/90"
-            }`}>
-              NA
-            </div>
+            {profile?.avatarUrl ? (
+              <img src={profile.avatarUrl} alt={profile.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+            ) : (
+              <div className={`w-full h-full flex items-center justify-center text-xs font-semibold ${
+                isLight ? "bg-slate-200 text-slate-800" : "bg-gradient-to-tr from-[#1a2333] to-[#24334a] text-white/90"
+              }`}>
+                {profile?.initials || "AX"}
+              </div>
+            )}
             {/* Subtle glow underneath */}
             <div 
               className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" 
@@ -337,6 +337,17 @@ export default function SidebarNav({
               />
             )}
           </button>
+
+          {profileRequired && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="absolute -right-2.5 -top-2 rounded-full border px-1.5 py-0.5 text-[7px] font-mono font-bold uppercase tracking-wider shadow-lg"
+              style={{ color: accentColor.hex, borderColor: `${accentColor.hex}70`, backgroundColor: isLight ? "white" : "#121722", boxShadow: `0 0 12px ${accentColor.glow}` }}
+            >
+              Configurar
+            </motion.span>
+          )}
 
           {/* Profile Tooltip */}
           <AnimatePresence>
@@ -352,12 +363,12 @@ export default function SidebarNav({
                     : "bg-[#121722]/95 border-white/15 text-white"
                 }`}
               >
-                <div className={`text-xs font-sans font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>Nelson Afonso</div>
+                <div className={`text-xs font-sans font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>{profile?.name || "Perfil AXION"}</div>
                 <div 
                   className="text-[10px] font-mono"
                   style={{ color: accentColor.hex }}
                 >
-                  {activeTab === "profile" ? "Perfil Aberto" : "Ver Perfil • Admin"}
+                  {profileRequired ? "Configurar perfil" : activeTab === "profile" ? "Perfil Aberto" : `Ver Perfil${profile?.role ? ` • ${profile.role}` : ""}`}
                 </div>
                 <div className={`absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent ${
                   isLight ? "border-r-white/95" : "border-r-[#121722]/95"

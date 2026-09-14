@@ -8,6 +8,8 @@ import { getDriveUploadAction, type DriveOAuthStatus } from "./driveUploadState"
 interface DocumentRepositoryScreenProps {
   accentColor?: AccentColorOption;
   onBackToOverview?: () => void;
+  requestedDocument?: string;
+  onRequestedDocumentHandled?: () => void;
 }
 
 interface DocumentsResponse {
@@ -51,6 +53,8 @@ const getColor = (document: DriveDocument) => {
 export default function DocumentRepositoryScreen({
   accentColor = { id: "axion-blue", name: "AXION Blue", hex: "#00f0ff", secondary: "#0284c7", glow: "rgba(0, 240, 255, 0.4)" },
   onBackToOverview,
+  requestedDocument = "",
+  onRequestedDocumentHandled,
 }: DocumentRepositoryScreenProps) {
   const [documents, setDocuments] = useState<DriveDocument[]>([]);
   const [folderUrl, setFolderUrl] = useState("");
@@ -117,6 +121,14 @@ export default function DocumentRepositoryScreen({
       .some((value) => value.toLocaleLowerCase("pt").includes(normalized));
     return matches && (category === "Todos" || getCategory(document) === category);
   }), [category, documents, query]);
+  useEffect(() => {
+    const requested = requestedDocument.trim().toLocaleLowerCase("pt");
+    if (!requested || !documents.length) return;
+    const match = documents.find((document) => document.name.toLocaleLowerCase("pt").includes(requested));
+    if (match) setPreview(match);
+    else setQuery(requestedDocument);
+    onRequestedDocumentHandled?.();
+  }, [documents, onRequestedDocumentHandled, requestedDocument]);
   const totalBytes = useMemo(() => documents.reduce((total, document) => total + (document.size || 0), 0), [documents]);
   const totalSize = totalBytes ? `${new Intl.NumberFormat("pt-PT", { maximumFractionDigits: 1 }).format(totalBytes / 1024 / 1024)} MB` : "0 B";
   const openDrive = (document?: DriveDocument) => {
@@ -166,6 +178,7 @@ export default function DocumentRepositoryScreen({
       });
       setUploadProgress(100);
       await loadDocuments();
+      window.dispatchEvent(new CustomEvent("axion:realtime", { detail: { table: "audit_logs" } }));
       setIsUploadOpen(false);
       setUploadFile(null);
     } catch (uploadFailure) {

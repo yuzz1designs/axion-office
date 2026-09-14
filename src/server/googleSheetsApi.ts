@@ -9,6 +9,10 @@ import {
   rowToCompany,
   type CrmCompany,
 } from "./crmCompany";
+import { authenticateSupabaseUser, readSessionToken } from "./supabaseAuth";
+import { getSupabaseBackend } from "./supabaseBackend";
+import { getAllowedEmails } from "./supabaseConfig";
+import { recordTeamActivity } from "./teamActivityStore";
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID || "1YauPqJGJonmCE28DwpqWchO-SV2IffzQ1ORc7KtH54k";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -102,6 +106,11 @@ export async function handleGoogleSheetsApi(req: IncomingMessage, res: ServerRes
   if (!url.pathname.startsWith("/api/crm/")) return next();
 
   try {
+    const backend = getSupabaseBackend();
+    if (!backend) return sendJson(res, 503, { error: "Supabase ainda não está configurado." });
+    const user = await authenticateSupabaseUser(readSessionToken(req.headers.cookie), backend.client.auth, getAllowedEmails());
+    if (!user) return sendJson(res, 401, { error: "Inicia sessão com uma conta AXION autorizada." });
+
     if (url.pathname === "/api/crm/status" && req.method === "GET") {
       return sendJson(res, 200, { configured: Boolean(getServiceAccount()), sheetId: SHEET_ID });
     }
@@ -120,6 +129,7 @@ export async function handleGoogleSheetsApi(req: IncomingMessage, res: ServerRes
         method: "PUT", body: JSON.stringify({ values: [companyToRow(company)] }),
       }) as { updatedRows?: number };
       if (writeResult.updatedRows !== 1) throw new Error("GOOGLE_SHEETS_WRITE_NOT_CONFIRMED");
+      await recordTeamActivity(backend.client, user.id, "client.created", "client", company.id || null, { name: company.company });
       return sendJson(res, 201, { company });
     }
     const match = url.pathname.match(/^\/api\/crm\/companies\/([^/]+)$/);
@@ -133,6 +143,7 @@ export async function handleGoogleSheetsApi(req: IncomingMessage, res: ServerRes
       await sheetsRequest(`/values/${encodeURIComponent(`Empresas!A${sheetRow}:Q${sheetRow}`)}?valueInputOption=USER_ENTERED`, {
         method: "PUT", body: JSON.stringify({ values: [companyToRow(company)] }),
       });
+      await recordTeamActivity(backend.client, user.id, "client.updated", "client", company.id || null, { name: company.company });
       return sendJson(res, 200, { company });
     }
     return sendJson(res, 404, { error: "Endpoint CRM não encontrado." });

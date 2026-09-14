@@ -1,35 +1,83 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AivaVisualState } from "./aivaVisual.types";
+import type { AivaBrainId } from "../../lib/aivaBrain";
+import type { AivaRealtimeVoice } from "../../lib/aivaRealtimeVoice";
+import { appendAivaMessage, type AivaConversation } from "../../lib/aivaConversation";
+import type { MutableRefObject } from "react";
+import type { AivaToolCall, AivaToolResult } from "../../lib/aivaTools";
+import { isConciseCompletionTool } from "../../lib/aivaTools";
+import { advanceVoiceSilence, createVoiceSilenceState, describeVoiceCaptureError, replaceVoiceRequest, type VoiceCaptureStage } from "./voiceSilence";
 
-interface UseAivaOptions { muted: boolean; }
-
-function getPreferredBrowserVoice() {
-  const voices = window.speechSynthesis?.getVoices() ?? [];
-  return voices.find((voice) => voice.lang.toLowerCase() === "pt-pt" && /female|joana|maria|helena/i.test(voice.name))
-    ?? voices.find((voice) => voice.lang.toLowerCase() === "pt-pt")
-    ?? voices.find((voice) => voice.lang.toLowerCase().startsWith("pt"));
+interface UseAivaOptions {
+  muted: boolean;
+  voice: AivaRealtimeVoice;
+  conversation: MutableRefObject<AivaConversation>;
+  brain?: AivaBrainId;
+  context?: string;
+  onToolCalls?: (calls: AivaToolCall[], signal?: AbortSignal) => Promise<AivaToolResult[]>;
 }
 
-export function useAivaVisualState({ muted }: UseAivaOptions) {
+export function useAivaVisualState({ muted, voice, conversation, brain = "mark-i", context = "aiva", onToolCalls }: UseAivaOptions) {
   const [state, setState] = useState<AivaVisualState>("idle");
   const [userMessage, setUserMessage] = useState("");
   const [response, setResponse] = useState("");
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [notice, setNotice] = useState("");
-  const previousResponseId = useRef<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const mediaStream = useRef<MediaStream | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
   const discardRecording = useRef(false);
+  const audioContext = useRef<AudioContext | null>(null);
+  const silenceFrame = useRef<number | null>(null);
   const activeAudio = useRef<HTMLAudioElement | null>(null);
   const activeAudioUrl = useRef<string | null>(null);
 
+  const stopSilenceDetection = useCallback(() => {
+    if (silenceFrame.current !== null) cancelAnimationFrame(silenceFrame.current);
+    silenceFrame.current = null;
+    if (audioContext.current) void audioContext.current.close();
+    audioContext.current = null;
+  }, []);
+
   const releaseMicrophone = useCallback(() => {
+    stopSilenceDetection();
     mediaStream.current?.getTracks().forEach((track) => track.stop());
     mediaStream.current = null;
     recorder.current = null;
-  }, []);
+  }, [stopSilenceDetection]);
+
+  const detectSilence = useCallback((stream: MediaStream) => {
+    stopSilenceDetection();
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.2;
+    context.createMediaStreamSource(stream).connect(analyser);
+    audioContext.current = context;
+    const samples = new Uint8Array(analyser.fftSize);
+    let silenceState = createVoiceSilenceState();
+
+    const measure = () => {
+      if (recorder.current?.state !== "recording") return;
+      analyser.getByteTimeDomainData(samples);
+      let energy = 0;
+      for (const sample of samples) {
+        const amplitude = (sample - 128) / 128;
+        energy += amplitude * amplitude;
+      }
+      const rms = Math.sqrt(energy / samples.length);
+      const result = advanceVoiceSilence(silenceState, rms >= 0.025, performance.now());
+      silenceState = result.state;
+      if (result.shouldStop) {
+        recorder.current.stop();
+        return;
+      }
+      silenceFrame.current = requestAnimationFrame(measure);
+    };
+
+    silenceFrame.current = requestAnimationFrame(measure);
+  }, [stopSilenceDetection]);
 
   const stopPlayback = useCallback(() => {
     if (activeAudio.current) {
@@ -44,19 +92,6 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
     window.speechSynthesis?.cancel();
   }, []);
 
-  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
-    if (!("speechSynthesis" in window)) return resolve();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "pt-PT";
-    utterance.rate = 0.94;
-    utterance.pitch = 1.02;
-    const voice = getPreferredBrowserVoice();
-    if (voice) utterance.voice = voice;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.speak(utterance);
-  }), []);
-
   const speak = useCallback(async (text: string, signal: AbortSignal) => {
     if (muted) return;
     setState("speaking");
@@ -64,7 +99,7 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
       const result = await fetch("/api/aiva/speech", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice }),
         signal,
       });
       if (!result.ok) throw new Error("TTS_UNAVAILABLE");
@@ -80,11 +115,11 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
       });
     } catch (error) {
       if (signal.aborted) return;
-      await browserSpeechFallback(text);
+      setNotice("Voz temporariamente indisponível");
     } finally {
       stopPlayback();
     }
-  }, [browserSpeechFallback, muted, stopPlayback]);
+  }, [muted, stopPlayback, voice]);
 
   useEffect(() => {
     fetch("/api/aiva/status")
@@ -105,35 +140,52 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
     setState((current) => current === "speaking" ? "idle" : current);
   }, [muted, stopPlayback]);
 
-  const runInteraction = useCallback(async (message: string) => {
+  const runInteraction = useCallback(async (message: string, audible = true) => {
     const clean = message.trim();
     if (!clean) return;
-    requestController.current?.abort();
-    stopPlayback();
-    const controller = new AbortController();
+    const controller = replaceVoiceRequest(requestController.current);
     requestController.current = controller;
+    stopPlayback();
     setUserMessage(clean);
     setResponse("");
     setNotice("");
     setState("thinking");
+    let previousResponseId: string | null = null;
+    const history = conversation.current.messages.slice();
+    if (history.at(-1)?.role === "user" && history.at(-1)?.content === clean) history.pop();
+    appendAivaMessage(conversation.current, "user", clean);
 
     try {
-      const result = await fetch("/api/aiva/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, previousResponseId: previousResponseId.current }),
-        signal: controller.signal,
-      });
-      const data = await result.json() as { text?: string; responseId?: string; error?: string; code?: string };
-      if (!result.ok) throw new Error(data.code || data.error || "AIVA_REQUEST_FAILED");
-      const answer = data.text?.trim() || "Não consegui produzir uma resposta completa.";
-      previousResponseId.current = data.responseId ?? previousResponseId.current;
+      let payload: { message?: string; history?: typeof history; previousResponseId?: string | null; brain: AivaBrainId; context?: string; toolResults?: AivaToolResult[] } = { message: clean, history, brain, context };
+      let answer = "";
+      for (let turn = 0; turn < (brain === "mark-ii" ? 12 : 5); turn += 1) {
+        if (controller.signal.aborted) return;
+        const result = await fetch("/api/aiva/respond", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: controller.signal });
+        const data = await result.json() as { text?: string; responseId?: string; toolCalls?: AivaToolCall[]; error?: string; code?: string };
+        if (!result.ok) throw new Error(data.code || data.error || "AIVA_REQUEST_FAILED");
+        previousResponseId = data.responseId ?? previousResponseId;
+        const calls = Array.isArray(data.toolCalls) ? data.toolCalls : [];
+        if (!calls.length) { answer = data.text?.trim() || "A ação ficou concluída."; break; }
+        if (!onToolCalls) throw new Error("AIVA_ACTION_HOST_UNAVAILABLE");
+        setNotice(`A executar ${calls.length === 1 ? "uma ação" : `${calls.length} ações`}`);
+        const toolResults = await onToolCalls(calls, controller.signal);
+        if (controller.signal.aborted) return;
+        if (calls.every((call) => isConciseCompletionTool(call.name)) && toolResults.every((result) => result.ok)) {
+          answer = "Feito.";
+          break;
+        }
+        payload = { brain, context, previousResponseId, toolResults };
+      }
+      if (!answer) answer = "Interrompi a sequência para evitar ações repetidas. Confirme o estado antes de continuar.";
+      setNotice("");
       setResponse(answer);
-      await speak(answer, controller.signal);
+      appendAivaMessage(conversation.current, "assistant", answer);
+      if (audible) await speak(answer, controller.signal);
       if (!controller.signal.aborted) {
         setState("success");
-        window.setTimeout(() => setState("idle"), 900);
+        window.setTimeout(() => { if (requestController.current === controller && !controller.signal.aborted) setState("idle"); }, 900);
       }
+      return answer;
     } catch (error) {
       if (controller.signal.aborted) return;
       const notConfigured = error instanceof Error && error.message === "AIVA_NOT_CONFIGURED";
@@ -143,18 +195,23 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
         : "Não consegui estabelecer ligação ao meu núcleo de inteligência. Tente novamente dentro de instantes.");
       setNotice(notConfigured ? "Configuração necessária" : "Falha de ligação");
       setState(notConfigured ? "warning" : "error");
+      if (!audible) throw error;
     }
-  }, [configured, speak, stopPlayback]);
+  }, [brain, configured, context, conversation, onToolCalls, speak, stopPlayback]);
 
   const transcribeAndRespond = useCallback(async (audio: Blob) => {
+    const controller = replaceVoiceRequest(requestController.current);
+    requestController.current = controller;
     setState("thinking");
     try {
-      const result = await fetch("/api/aiva/transcribe", { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
+      const result = await fetch("/api/aiva/transcribe", { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio, signal: controller.signal });
       const data = await result.json() as { text?: string; code?: string; error?: string };
       if (!result.ok) throw new Error(data.code || data.error);
+      if (controller.signal.aborted) return;
       if (data.text?.trim()) await runInteraction(data.text);
       else setState("idle");
     } catch (error) {
+      if (controller.signal.aborted) return;
       setNotice(error instanceof Error && error.message === "AIVA_NOT_CONFIGURED" ? "Configure a API key para ativar a voz" : "Não consegui compreender o áudio");
       setState("warning");
     }
@@ -163,11 +220,13 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
   const startListening = useCallback(async () => {
     requestController.current?.abort();
     stopPlayback();
+    let captureStage: VoiceCaptureStage = "microphone";
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       mediaStream.current = stream;
       recordedChunks.current = [];
       discardRecording.current = false;
+      captureStage = "recorder";
       const mediaRecorder = new MediaRecorder(stream);
       recorder.current = mediaRecorder;
       mediaRecorder.ondataavailable = (event) => { if (event.data.size) recordedChunks.current.push(event.data); };
@@ -177,14 +236,21 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
         if (!discardRecording.current && audio.size > 0) void transcribeAndRespond(audio);
         discardRecording.current = false;
       };
+      captureStage = "analysis";
+      detectSilence(stream);
+      captureStage = "recording";
       mediaRecorder.start(250);
       setNotice("");
       setState("listening");
-    } catch {
-      setNotice("Autorize o microfone para falar com a AIVA");
+    } catch (error) {
+      discardRecording.current = true;
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      else releaseMicrophone();
+      console.error("[AIVA voice]", captureStage, error);
+      setNotice(describeVoiceCaptureError(captureStage, error));
       setState("warning");
     }
-  }, [releaseMicrophone, stopPlayback, transcribeAndRespond]);
+  }, [detectSilence, releaseMicrophone, stopPlayback, transcribeAndRespond]);
 
   const toggleListening = useCallback(() => {
     if (state === "listening" && recorder.current?.state === "recording") {
@@ -207,11 +273,11 @@ export function useAivaVisualState({ muted }: UseAivaOptions) {
 
   const newSession = useCallback(() => {
     stop();
-    previousResponseId.current = null;
+    conversation.current = { id: crypto.randomUUID(), messages: [] };
     setUserMessage("");
     setResponse("");
     setNotice("");
-  }, [stop]);
+  }, [conversation, stop]);
 
   return { state, userMessage, response, configured, notice, runInteraction, toggleListening, stop, newSession };
 }

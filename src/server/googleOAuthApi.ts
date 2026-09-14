@@ -2,6 +2,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { buildGoogleAuthorizationUrl, GOOGLE_DRIVE_SCOPE, OAuthStateStore, toPublicOAuthStatus } from "./googleOAuthCore";
 import { GoogleOAuthClient, type GoogleOAuthConfig } from "./googleOAuthClient";
 import { GoogleOAuthStore } from "./googleOAuthStore";
+import { authenticateSupabaseUser, readSessionToken } from "./supabaseAuth";
+import { getSupabaseBackend } from "./supabaseBackend";
+import { getAllowedEmails } from "./supabaseConfig";
+import { recordTeamActivity } from "./teamActivityStore";
 
 const states = new OAuthStateStore();
 const store = new GoogleOAuthStore();
@@ -36,6 +40,14 @@ export function getGoogleOAuthClient() {
   return config ? new GoogleOAuthClient(config) : null;
 }
 
+async function recordDriveActivity(req: IncomingMessage, action: "google.drive.connected" | "google.drive.disconnected", email?: string) {
+  const backend = getSupabaseBackend();
+  if (!backend) return;
+  const user = await authenticateSupabaseUser(readSessionToken(req.headers.cookie), backend.client.auth, getAllowedEmails());
+  if (!user) return;
+  await recordTeamActivity(backend.client, user.id, action, "integration", "google-drive", { name: email });
+}
+
 export async function handleGoogleOAuthApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (!url.pathname.startsWith("/api/google/oauth/")) return next();
@@ -66,6 +78,7 @@ export async function handleGoogleOAuthApi(req: IncomingMessage, res: ServerResp
       if (!tokens.scopes.includes(GOOGLE_DRIVE_SCOPE)) return redirect(res, "/?google-drive=error&reason=missing-scope");
       const email = await client.getUserEmail(tokens.accessToken);
       store.write({ refreshToken: tokens.refreshToken, email, scopes: tokens.scopes, connectedAt: new Date().toISOString() });
+      await recordDriveActivity(req, "google.drive.connected", email);
       return redirect(res, "/?google-drive=connected");
     }
 
@@ -73,6 +86,7 @@ export async function handleGoogleOAuthApi(req: IncomingMessage, res: ServerResp
       const grant = store.read();
       if (grant && client) await client.revokeGrant(grant.refreshToken).catch(() => false);
       store.clear();
+      await recordDriveActivity(req, "google.drive.disconnected");
       return sendJson(res, 200, { disconnected: true });
     }
 

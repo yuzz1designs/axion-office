@@ -1,51 +1,43 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  MOCK_PRIORITIES, 
-  MOCK_TODAY, 
-  MOCK_PULSE, 
-  MOCK_UPCOMING, 
-  MOCK_ACTIVITIES, 
-  INITIAL_STATE 
-} from "../../data/mockData";
+import { INITIAL_STATE } from "../../data/mockData";
 import { 
   DEFAULT_APPEARANCE,
   DEFAULT_COMMAND_CENTER,
   ACCENT_COLOR_OPTIONS
 } from "../../data/settingsMockData";
 import { 
-  MOCK_CALENDAR_EVENTS, 
-  MOCK_MEETING_ATAS, 
   MOCK_MEETING_INVITES, 
-  CalendarEvent, 
+  CalendarEvent,
+  IntegratedTask,
   MeetingAta, 
   MeetingInviteNotification 
 } from "../../data/calendarMockData";
-import { 
-  PriorityItem, 
-  TodayItem, 
-  PulseIndicator, 
-  UpcomingMeeting, 
-  ActivityLog 
-} from "../../types";
 import { AppearanceSettings, CommandCenterConfig, LanguageRegionSettings } from "../../types/settings";
 import { useLanguage } from "../../i18n/LanguageContext";
 import AxionLogo from "../ui/AxionLogo";
-import AivaStatus from "../aiva/AivaStatus";
 import AivaOverviewScreen from "../aiva/AivaOverviewScreen";
+import AivaPanelTransition from "../aiva/AivaPanelTransition";
+import { useAivaSession } from "../aiva/AivaSessionProvider";
 import UserProfileScreen from "../profile/UserProfileScreen";
 import DatabaseScreen from "../database/DatabaseScreen";
 import DocumentRepositoryScreen from "../documents/DocumentRepositoryScreen";
 import ClientsScreen from "../clients/ClientsScreen";
 import CalendarMeetingsScreen from "../calendar/CalendarMeetingsScreen";
 import PaymentsScreen from "../payments/PaymentsScreen";
+import NotificationsScreen from "../notifications/NotificationsScreen";
 import SidebarNav, { NavTabId } from "../navigation/SidebarNav";
 import SettingsPage from "../settings/SettingsPage";
 import MeetingInviteBanner from "./MeetingInviteBanner";
+import type { AxionProfile } from "../../types/profile";
+import type { FinancePayload } from "../../types/finance";
+import type { TeamActivityItem } from "../../server/teamActivityStore";
+import { selectNextMeeting, selectTodayTasks } from "./commandCenterCore";
+import { buildNotifications, type NotificationTarget } from "../notifications/notificationCore";
+import { normalizeAppearanceSettings } from "../../lib/appearance";
+import AnimatedOfficeBackground from "../ui/AnimatedOfficeBackground";
 import { 
   Clock, 
-  TrendingUp, 
-  TrendingDown, 
   ArrowRight, 
   Calendar, 
   CheckCircle2, 
@@ -61,6 +53,10 @@ import {
 
 interface CommandCenterProps {
   onBackToWelcome?: () => void;
+  profile?: AxionProfile | null;
+  profileRequired?: boolean;
+  currentDeviceId?: string;
+  onProfileSaved?: (profile: AxionProfile, currentDeviceId?: string) => void;
   appearance?: AppearanceSettings;
   onAppearanceChange?: (appearance: AppearanceSettings) => void;
   commandCenterConfig?: CommandCenterConfig;
@@ -71,6 +67,10 @@ interface CommandCenterProps {
 
 export default function CommandCenter({ 
   onBackToWelcome,
+  profile,
+  profileRequired = false,
+  currentDeviceId,
+  onProfileSaved,
   appearance: initialAppearance,
   onAppearanceChange,
   commandCenterConfig = DEFAULT_COMMAND_CENTER,
@@ -79,29 +79,59 @@ export default function CommandCenter({
   onLanguageRegionChange,
 }: CommandCenterProps) {
   const { language, t } = useLanguage();
+  const aivaSession = useAivaSession();
   const [activeTab, setActiveTab] = useState<NavTabId>("overview");
-  const [priorities, setPriorities] = useState<PriorityItem[]>(MOCK_PRIORITIES);
-  const [todayTasks, setTodayTasks] = useState<TodayItem[]>(MOCK_TODAY);
+  const [aivaClientQuery, setAivaClientQuery] = useState("");
+  const [aivaDocumentQuery, setAivaDocumentQuery] = useState("");
+  const [workspaceTasks, setWorkspaceTasks] = useState<IntegratedTask[]>([]);
+  const pendingTaskIds = useRef(new Set<string>());
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0);
+  const [financeData, setFinanceData] = useState<FinancePayload | null>(null);
+  const [teamActivities, setTeamActivities] = useState<TeamActivityItem[]>([]);
+  const [readNotificationKeys, setReadNotificationKeys] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
   const [sessionStartedAt] = useState(() => Date.now());
   const [sessionDurationSeconds, setSessionDurationSeconds] = useState(0);
-  const [activePulse, setActivePulse] = useState<string | null>(null);
   const [systemBooted, setSystemBooted] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
+  useEffect(() => aivaSession.registerNavigation(
+    (section) => setActiveTab(section),
+    (query) => setAivaClientQuery(query),
+    (query) => setAivaDocumentQuery(query),
+    (meetingId) => setSelectedMeetingId(meetingId),
+  ), [aivaSession.registerNavigation]);
+  useEffect(() => aivaSession.setCurrentSection(activeTab), [activeTab, aivaSession.setCurrentSection]);
+
   // Shared Global Meeting & Calendar States
-  const [events, setEvents] = useState<CalendarEvent[]>(MOCK_CALENDAR_EVENTS);
-  const [atas, setAtas] = useState<MeetingAta[]>(MOCK_MEETING_ATAS);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [atas, setAtas] = useState<MeetingAta[]>([]);
   const [meetingInvites, setMeetingInvites] = useState<MeetingInviteNotification[]>([]);
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string>("evt-1");
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string>("");
 
   // Handler for new meeting invite notifications broadcasted by leadership
   const handleBroadcastMeetingInvite = (invite: MeetingInviteNotification) => {
     setMeetingInvites(prev => [invite, ...prev]);
   };
 
-  const handleDismissInvite = (inviteId: string) => {
+  const handleDismissInvite = async (inviteId: string) => {
+    const notificationKey = `meeting-hidden:${inviteId}`;
+    setReadNotificationKeys((current) => new Set([...current, notificationKey]));
     setMeetingInvites(prev => prev.filter(inv => inv.id !== inviteId));
+    try {
+      const response = await fetch("/api/notifications/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys: [notificationKey] }),
+      });
+      if (!response.ok) throw new Error("MEETING_HIDE_FAILED");
+    } catch {
+      setReadNotificationKeys((current) => {
+        const next = new Set(current);
+        next.delete(notificationKey);
+        return next;
+      });
+    }
   };
 
   const handleAcceptInviteAndOpen = (eventId: string) => {
@@ -111,17 +141,17 @@ export default function CommandCenter({
 
   // Appearance & Customizable Accent Light State
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
-    if (initialAppearance) return initialAppearance;
+    if (initialAppearance) return normalizeAppearanceSettings(initialAppearance);
     try {
       const cached = localStorage.getItem("axion_office_appearance");
-      if (cached) return JSON.parse(cached);
+      if (cached) return normalizeAppearanceSettings(JSON.parse(cached));
     } catch (e) {}
     return DEFAULT_APPEARANCE;
   });
 
   useEffect(() => {
     if (initialAppearance) {
-      setAppearance(initialAppearance);
+      setAppearance(normalizeAppearanceSettings(initialAppearance));
     }
   }, [initialAppearance]);
 
@@ -132,38 +162,22 @@ export default function CommandCenter({
     }
   };
 
-  const isLight = appearance.theme === "light";
+  const isLight = false;
+  const isAnimatedBackground = appearance.theme === "animated";
   const currentAccent = ACCENT_COLOR_OPTIONS.find(c => c.id === appearance.accentColor) || ACCENT_COLOR_OPTIONS[0];
-  const visibleModuleIds = new Set(
-    commandCenterConfig.modules.filter((module) => module.visible).map((module) => module.id),
-  );
-  const isModuleVisible = (moduleId: string) => visibleModuleIds.has(moduleId);
   const moduleOrder = (moduleId: string) => {
     const index = commandCenterConfig.modules.findIndex((module) => module.id === moduleId);
     return index === -1 ? commandCenterConfig.modules.length : index;
   };
-  const showLeftColumn = isModuleVisible("projects") || isModuleVisible("priorities") || isModuleVisible("my-tasks");
-  const showRightColumn = isModuleVisible("today") || isModuleVisible("meetings");
-  const showBottomRow = isModuleVisible("recent-activity") || isModuleVisible("briefing") ||
-    isModuleVisible("sales") || isModuleVisible("finance") || isModuleVisible("team-activity");
-  const leftColumnWidth = commandCenterConfig.primaryMetric === "priorities"
-    ? "lg:w-[350px] xl:w-[390px]"
-    : "lg:w-[290px] xl:w-[330px]";
-  const rightColumnWidth = ["today", "meetings"].includes(commandCenterConfig.primaryMetric)
-    ? "lg:w-[350px] xl:w-[390px]"
-    : "lg:w-[290px] xl:w-[330px]";
+  const showRightColumn = true;
+  const rightColumnWidth = "lg:w-[350px] xl:w-[390px]";
 
-  // Synchronize document theme attribute and class for full app-wide light/dark propagation
+  // The current interface is always dark; animated only changes its background layer.
   useEffect(() => {
-    const themeVal = appearance.theme === "light" ? "light" : "dark";
-    document.body.setAttribute("data-theme", themeVal);
-    document.documentElement.setAttribute("data-theme", themeVal);
-    if (themeVal === "light") {
-      document.body.classList.add("theme-light");
-    } else {
-      document.body.classList.remove("theme-light");
-    }
-  }, [appearance.theme]);
+    document.body.setAttribute("data-theme", "dark");
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.body.classList.remove("theme-light");
+  }, []);
 
   // Keep the real clock and the current Office session duration synchronized.
   useEffect(() => {
@@ -184,6 +198,40 @@ export default function CommandCenter({
     };
   }, [sessionStartedAt]);
 
+  useEffect(() => {
+    let active = true;
+    const applyWorkspace = (status: { connected?: boolean; tasks?: IntegratedTask[]; events?: CalendarEvent[] }, platform?: { tasks?: IntegratedTask[]; events?: CalendarEvent[]; invites?: MeetingInviteNotification[] }) => {
+      if (!active) return;
+      const platformTasks = platform?.tasks || [];
+      const platformEvents = platform?.events || [];
+      setWorkspaceTasks([...platformTasks, ...(status.connected ? status.tasks || [] : []).filter((task) => !platformTasks.some((item) => item.id === task.id))]);
+      setEvents(platformEvents);
+      if (platform) setMeetingInvites(platform.invites || []);
+    };
+    const refreshOverview = async (syncGoogle = false) => {
+      const [workspaceResult, meetingsResult, financeResult, activityResult, readsResult] = await Promise.allSettled([
+        fetch(syncGoogle ? "/api/google/workspace/sync" : "/api/google/workspace/status", syncGoogle ? { method: "POST" } : undefined).then((response) => response.ok ? response.json() : null),
+        fetch("/api/meetings").then((response) => response.ok ? response.json() : null),
+        fetch("/api/finance").then((response) => response.ok ? response.json() as Promise<FinancePayload> : null),
+        fetch("/api/team/activity").then((response) => response.ok ? response.json() as Promise<{ activities: TeamActivityItem[] }> : null),
+        fetch("/api/notifications/read").then((response) => response.ok ? response.json() as Promise<{ keys: string[] }> : null),
+      ]);
+      if (!active) return;
+      if (workspaceResult.status === "fulfilled" && workspaceResult.value) applyWorkspace(workspaceResult.value, meetingsResult.status === "fulfilled" ? meetingsResult.value : undefined);
+      if (financeResult.status === "fulfilled" && financeResult.value) {
+        setFinanceData(financeResult.value);
+        setMonthlyRevenue(financeResult.value.summary.monthlyRevenue || 0);
+      }
+      if (activityResult.status === "fulfilled" && activityResult.value) setTeamActivities(activityResult.value.activities || []);
+      if (readsResult.status === "fulfilled" && readsResult.value) setReadNotificationKeys(new Set(readsResult.value.keys || []));
+    };
+    void refreshOverview(false).then(() => refreshOverview(true));
+    const realtimeRefresh = () => void refreshOverview(false);
+    window.addEventListener("axion:realtime", realtimeRefresh);
+    const timer = window.setInterval(() => void refreshOverview(false), 30_000);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("axion:realtime", realtimeRefresh); };
+  }, []);
+
   const formatSessionDuration = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -199,14 +247,63 @@ export default function CommandCenter({
     setMousePos({ x, y });
   };
 
-  // Toggle tasks as a neat micro-interaction
-  const handleToggleTask = (taskId: string) => {
-    setTodayTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        return { ...t, completed: !t.completed };
-      }
-      return t;
-    }));
+  const localDate = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, "0")}-${String(currentTime.getDate()).padStart(2, "0")}`;
+  const localTime = `${String(currentTime.getHours()).padStart(2, "0")}:${String(currentTime.getMinutes()).padStart(2, "0")}`;
+  const todayTasks = useMemo(() => selectTodayTasks(workspaceTasks, localDate), [workspaceTasks, localDate]);
+  const nextMeeting = useMemo(() => selectNextMeeting(events, localDate, localTime), [events, localDate, localTime]);
+  const notifications = useMemo(() => buildNotifications({
+    now: currentTime,
+    timezone: profile?.timezone,
+    activities: teamActivities.filter((activity) => activity.actorUserId !== profile?.id),
+    tasks: workspaceTasks,
+    events,
+    payments: financeData?.payments || [],
+    revenues: financeData?.revenues || [],
+    readKeys: readNotificationKeys,
+  }), [currentTime, events, financeData, readNotificationKeys, teamActivities, workspaceTasks]);
+  const unreadNotifications = notifications.filter((item) => !item.read).length;
+  const visibleMeetingInvites = useMemo(
+    () => meetingInvites.filter((invite) => !readNotificationKeys.has(`meeting-hidden:${invite.id}`)),
+    [meetingInvites, readNotificationKeys],
+  );
+
+  const markNotificationsRead = async (keys: string[]) => {
+    const pending = keys.filter((key) => !readNotificationKeys.has(key));
+    if (!pending.length) return;
+    setReadNotificationKeys((current) => new Set([...current, ...pending]));
+    const response = await fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys: pending }) });
+    if (!response.ok) {
+      setReadNotificationKeys((current) => new Set([...current].filter((key) => !pending.includes(key))));
+      throw new Error("NOTIFICATION_MARK_READ_FAILED");
+    }
+  };
+
+  const openNotification = (target: NotificationTarget, id: string) => {
+    void markNotificationsRead([id]).catch(() => undefined);
+    setActiveTab(target);
+  };
+
+  const handleToggleTask = async (taskId: string) => {
+    if (pendingTaskIds.current.has(taskId)) return;
+    const task = workspaceTasks.find((item) => item.id === taskId);
+    if (!task) return;
+    const completed = !task.completed;
+    pendingTaskIds.current.add(taskId);
+    setWorkspaceTasks((previous) => previous.map((item) => item.id === taskId ? { ...item, completed } : item));
+    try {
+      const platformTask = Boolean(task.eventId && !task.googleTaskId);
+      const response = await fetch(platformTask ? `/api/meetings/tasks/${encodeURIComponent(task.id)}` : `/api/google/workspace/tasks/${encodeURIComponent(task.googleTaskId || "")}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...task, completed }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "TASK_UPDATE_FAILED");
+      setWorkspaceTasks((previous) => previous.map((item) => item.id === taskId ? result.task : item));
+      if (profile && result.focusMinutes != null) onProfileSaved?.({ ...profile, focusMinutes: result.focusMinutes }, currentDeviceId);
+    } catch {
+      setWorkspaceTasks((previous) => previous.map((item) => item.id === taskId ? task : item));
+    } finally {
+      pendingTaskIds.current.delete(taskId);
+    }
   };
 
   // Dynamic greeting based on time (Hour is 22 based on seed)
@@ -227,16 +324,14 @@ export default function CommandCenter({
     return currentTime.toLocaleDateString(language === "pt" ? "pt-PT" : "en-US", options).toUpperCase();
   };
 
-  // Pulse bullet colors
-  const getPulseColor = (status: string) => {
-    switch(status) {
-      case "Healthy": return "bg-emerald-400 text-emerald-400 shadow-emerald-500/20";
-      case "Stable": return "bg-blue-400 text-blue-400 shadow-blue-500/20";
-      case "Normal": return "bg-zinc-400 text-zinc-400 shadow-zinc-500/10";
-      case "At Risk": return "bg-rose-500 text-rose-500 shadow-rose-500/30";
-      default: return "bg-zinc-400 text-zinc-400";
-    }
+  const formatMeetingDate = (date: string, time: string) => {
+    const label = new Date(`${date}T12:00:00`).toLocaleDateString(language === "pt" ? "pt-PT" : "en-US", { day: "2-digit", month: "short" });
+    return `${label} · ${time}`.toUpperCase();
   };
+
+  const formatActivityDate = (date: string) => new Date(date).toLocaleString(language === "pt" ? "pt-PT" : "en-US", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: profile?.timezone || "Europe/Lisbon",
+  });
 
   // Transition variants for staggered boots
   const itemVariants = {
@@ -264,14 +359,22 @@ export default function CommandCenter({
       <SidebarNav 
         activeTab={activeTab}
         onSelectTab={(tab) => setActiveTab(tab)}
+        unreadNotifications={unreadNotifications}
+        onOpenNotifications={() => setActiveTab("notifications")}
         onOpenProfile={() => setActiveTab("profile")}
+        profile={profile}
+        profileRequired={profileRequired}
         accentColor={currentAccent}
         isLight={isLight}
       />
 
+      <AnimatePresence>
+        {isAnimatedBackground && <AnimatedOfficeBackground color={currentAccent.hex} />}
+      </AnimatePresence>
+
       {/* Background Grid & Radial Core Light */}
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
-        isLight ? "tech-grid-light opacity-50" : "tech-grid opacity-20"
+        isAnimatedBackground ? "tech-grid opacity-[0.08]" : "tech-grid opacity-20"
       }`} />
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
         isLight ? "tech-radial-light opacity-70" : "tech-radial"
@@ -352,7 +455,26 @@ export default function CommandCenter({
 
       {/* ==================== SCREEN CONTENT CONTAINER ==================== */}
       <AnimatePresence mode="wait">
-        {activeTab === "profile" ? (
+        {activeTab === "notifications" ? (
+          <motion.div
+            key="notifications-tab-view"
+            initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full h-full overflow-y-auto pr-2 relative z-10"
+          >
+            <NotificationsScreen
+              notifications={notifications}
+              accentColor={currentAccent}
+              isLight={isLight}
+              timezone={profile?.timezone}
+              onBack={() => setActiveTab("overview")}
+              onOpen={openNotification}
+              onMarkAllRead={() => markNotificationsRead(notifications.map((item) => item.id))}
+            />
+          </motion.div>
+        ) : activeTab === "profile" ? (
           <motion.div
             key="profile-tab-view"
             initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
@@ -364,6 +486,10 @@ export default function CommandCenter({
             <UserProfileScreen 
               accentColor={currentAccent}
               onBackToOverview={() => setActiveTab("overview")}
+              initialProfile={profile}
+              setupRequired={profileRequired}
+              currentDeviceId={currentDeviceId}
+              onProfileSaved={onProfileSaved}
             />
           </motion.div>
         ) : activeTab === "clients" ? (
@@ -378,6 +504,8 @@ export default function CommandCenter({
             <ClientsScreen 
               accentColor={currentAccent}
               onBackToOverview={() => setActiveTab("overview")}
+              requestedClient={aivaClientQuery}
+              onRequestedClientHandled={() => setAivaClientQuery("")}
             />
           </motion.div>
         ) : activeTab === "database" ? (
@@ -406,6 +534,8 @@ export default function CommandCenter({
             <DocumentRepositoryScreen 
               accentColor={currentAccent}
               onBackToOverview={() => setActiveTab("overview")}
+              requestedDocument={aivaDocumentQuery}
+              onRequestedDocumentHandled={() => setAivaDocumentQuery("")}
             />
           </motion.div>
         ) : activeTab === "calendar" ? (
@@ -427,8 +557,22 @@ export default function CommandCenter({
               selectedMeetingId={selectedMeetingId}
               onSelectMeetingId={setSelectedMeetingId}
               onBroadcastMeetingInvite={handleBroadcastMeetingInvite}
-              currentUserRole="Senior Partner & Brand Architect"
+              currentUserRole={profile?.role || "Membro AXION"}
+              currentUser={profile}
+              onMeetingCreated={(event, createdTasks) => {
+                setEvents((previous) => [event, ...previous.filter((item) => item.id !== event.id)]);
+                const ownTasks = createdTasks.filter((task) => task.assignee.name === (profile?.name || profile?.displayName));
+                setWorkspaceTasks((previous) => [...ownTasks, ...previous.filter((item) => !ownTasks.some((task) => task.id === item.id))]);
+              }}
+              onMeetingUpdated={(event, updatedTasks) => {
+                setEvents((previous) => previous.map((item) => item.id === event.id ? event : item));
+                const ownTasks = updatedTasks.filter((task) => task.assignee.name === (profile?.name || profile?.displayName));
+                setWorkspaceTasks((previous) => [...ownTasks, ...previous.filter((item) => !ownTasks.some((task) => task.id === item.id))]);
+              }}
               isLight={isLight}
+              onFocusMinutesChange={(focusMinutes) => {
+                if (profile) onProfileSaved?.({ ...profile, focusMinutes }, currentDeviceId);
+              }}
             />
           </motion.div>
         ) : activeTab === "payments" ? (
@@ -465,19 +609,12 @@ export default function CommandCenter({
               />
           </motion.div>
         ) : activeTab === "aiva" ? (
-          <motion.div
-            key="aiva-tab-view"
-            initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full h-full overflow-y-auto pr-2 relative z-10"
-          >
+          <AivaPanelTransition key="aiva-tab-view" accentColor={currentAccent.hex}>
             <AivaOverviewScreen 
               accentColor={currentAccent}
               onBackToOverview={() => setActiveTab("overview")}
             />
-          </motion.div>
+          </AivaPanelTransition>
         ) : activeTab !== "overview" ? (
           <motion.div
             key={`placeholder-${activeTab}`}
@@ -491,7 +628,7 @@ export default function CommandCenter({
               <Sparkles size={28} style={{ color: currentAccent.hex }} />
             </div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: -28 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -540,9 +677,9 @@ export default function CommandCenter({
             className="w-full h-full max-w-[1580px] mx-auto flex flex-col justify-between relative z-10 gap-3 md:gap-5 px-2 sm:px-4"
           >
             {/* Pop-up / Alerta de Reunião Convocada pela Liderança */}
-            {meetingInvites.length > 0 && (
+            {visibleMeetingInvites.length > 0 && (
               <MeetingInviteBanner
-                invite={meetingInvites[0]}
+                invite={visibleMeetingInvites[0]}
                 onAcceptAndOpen={handleAcceptInviteAndOpen}
                 onDismiss={handleDismissInvite}
                 accentColor={currentAccent}
@@ -575,7 +712,7 @@ export default function CommandCenter({
             </div>
             
             <h1 className="text-2xl md:text-3xl font-sans font-bold tracking-tight text-white mt-2 leading-none">
-              {getGreeting()}, <span className="text-white/80 font-normal">{INITIAL_STATE.user.name.toUpperCase()}</span>
+              {getGreeting()}, <span className="text-white/80 font-normal">{(profile?.displayName || profile?.name || INITIAL_STATE.user.name).toUpperCase()}</span>
             </h1>
             
             <span className="text-xs text-white/40 font-mono tracking-wider mt-1.5 flex items-center gap-2">
@@ -621,117 +758,59 @@ export default function CommandCenter({
         {/* ==================== MIDDLE ROW (CENTRAL CORE & REFINED SPACIOUS LAYOUT) ==================== */}
         <div className="flex-1 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-14 my-2 relative w-full">
           
-          {/* LEFT SIDE DATA COLUMN - Firmly anchored to the left */}
-          {showLeftColumn && (
+          {/* LEFT SIDE DATA COLUMN - Activity and financial signal */}
           <motion.div
             layout
-            className={`w-full ${leftColumnWidth} shrink-0 flex flex-col justify-center gap-7 self-center z-20 transition-[width] duration-500`}
+            className={`w-full ${rightColumnWidth} shrink-0 flex flex-col justify-center gap-7 self-center z-20 transition-[width] duration-500`}
           >
-            
-            {/* AXION Pulse Section */}
-            {isModuleVisible("projects") && <motion.div 
+            <motion.div
               custom={2}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
-              className="flex flex-col gap-3.5 text-left"
-              style={{ order: moduleOrder("projects") }}
+              className="flex flex-col gap-3 text-left"
             >
-              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                <div 
-                  className="w-1.5 h-1.5 rounded-full animate-ping" 
-                  style={{ backgroundColor: currentAccent.hex, boxShadow: `0 0 10px ${currentAccent.hex}` }}
-                />
-                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">{t("home.pulse")}</h3>
+              <div className="flex items-center gap-2.5 border-b border-white/5 pb-2">
+                <Activity size={12} className="text-white/30 animate-pulse" />
+                <h3 className="text-xs font-mono tracking-[0.2em] text-white/60 uppercase">{t("home.activity")}</h3>
               </div>
-              
               <div className="flex flex-col gap-2.5">
-                {MOCK_PULSE.map((pulse) => (
-                  <div 
-                    key={pulse.label}
-                    onMouseEnter={() => setActivePulse(pulse.label)}
-                    onMouseLeave={() => setActivePulse(null)}
-                    className="group relative flex items-center justify-between py-1.5 px-2.5 hover:bg-white/[0.02] border border-transparent hover:border-white/5 rounded-sm transition-all duration-300 cursor-default"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${getPulseColor(pulse.status)}`} />
-                      <span className="text-xs text-white/70 group-hover:text-white font-sans tracking-wide transition-colors">
-                        {pulse.label}
-                      </span>
+                {teamActivities.slice(0, commandCenterConfig.recentItemsCount).map((log) => (
+                  <div key={log.id} className="flex flex-col gap-1 border-l border-white/10 pl-3 text-[10px] font-mono text-white/50 hover:border-brand-accent/50 hover:text-white/80 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-accent/70">{formatActivityDate(log.createdAt)}</span>
+                      <span className="text-white/20">•</span>
+                      <span className="text-white/40 truncate">{log.actorName.toUpperCase()}</span>
                     </div>
-
-                    <div className="flex items-center gap-2 font-mono text-[10px]">
-                      <span className="text-white/40 group-hover:text-brand-accent transition-colors">
-                        {pulse.status.toUpperCase()}
-                      </span>
-                      {pulse.trend === "up" && <TrendingUp size={11} className="text-emerald-400" />}
-                      {pulse.trend === "down" && <TrendingDown size={11} className="text-rose-500" />}
-                      {pulse.trend === "stable" && <span className="text-white/20">•</span>}
-                    </div>
+                    <span className="text-white/60 line-clamp-2">{log.action}</span>
                   </div>
                 ))}
+                {teamActivities.length === 0 && (
+                  <span className="text-[10px] font-mono leading-relaxed text-white/30">
+                    Sem atividade recente publicada por outros utilizadores.
+                  </span>
+                )}
               </div>
-            </motion.div>}
+            </motion.div>
 
-            {/* Priorities Panel */}
-            {isModuleVisible("priorities") && <motion.div 
+            <motion.button
               custom={3}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
               variants={itemVariants}
-              className="flex flex-col gap-3.5"
-              style={{ order: moduleOrder("priorities") }}
+              onClick={() => setActiveTab("payments")}
+              className="w-full border border-white/5 bg-white/[0.015] hover:bg-white/[0.03] rounded-sm px-4 py-3.5 text-left transition-colors"
             >
-              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                <h3 className="text-xs font-mono tracking-[0.2em] text-white/40 uppercase">{t("home.priorities")}</h3>
-                <span className="font-mono text-[9px] text-rose-500/80 ml-auto bg-rose-500/10 px-1.5 py-0.5 rounded">ACT</span>
-              </div>
-              
-              <div className="flex flex-col gap-3.5">
-                {priorities.slice(0, commandCenterConfig.recentItemsCount).map((item) => (
-                  <div 
-                    key={item.id} 
-                    className="group flex flex-col gap-1 pl-3.5 border-l-2 border-white/10 hover:border-brand-accent transition-colors duration-500 py-0.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold font-sans tracking-wider text-white group-hover:text-brand-accent transition-colors duration-300">
-                        {item.project}
-                      </span>
-                      <span className="text-[9px] font-mono tracking-wider text-white/30 uppercase">
-                        {item.statusText}
-                      </span>
-                    </div>
-                    
-                    <p className="text-[11px] text-white/50 group-hover:text-white/80 transition-colors leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>}
-
-            {isModuleVisible("my-tasks") && (
-              <motion.div
-                layout
-                custom={3}
-                initial="hidden"
-                animate={systemBooted ? "visible" : "hidden"}
-                variants={itemVariants}
-                style={{ order: moduleOrder("my-tasks") }}
-                className="flex items-center justify-between rounded-sm border border-white/5 bg-white/[0.015] px-3.5 py-3"
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-mono tracking-[0.2em] text-white/35 uppercase">{t("home.myTasks")}</span>
-                  <span className="text-xs text-white/70">{t("home.pendingTasks")}</span>
-                </div>
-                <span className="text-2xl font-light" style={{ color: currentAccent.hex }}>
-                  {todayTasks.filter((task) => !task.completed).length}
+              <span className="text-[9px] font-mono tracking-[0.2em] text-white/30">REVENUE</span>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-xl font-light text-white/90">
+                  {new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(monthlyRevenue)}
                 </span>
-              </motion.div>
-            )}
+                <span className="text-[9px] text-white/30">recebido este mês</span>
+              </div>
+            </motion.button>
 
           </motion.div>
-          )}
 
           {/* CENTRAL CORE HERO LOGO (Centered with calibrated orbital rings & ample margin) */}
           <div className="flex-1 flex flex-col items-center justify-center relative py-6 lg:py-0 self-center min-w-0">
@@ -824,7 +903,7 @@ export default function CommandCenter({
           >
             
             {/* Today's Agenda Checklist */}
-            {isModuleVisible("today") && <motion.div 
+            <motion.div
               custom={4}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
@@ -837,7 +916,7 @@ export default function CommandCenter({
                   onClick={() => setActiveTab("calendar")}
                   className="text-xs font-mono tracking-[0.2em] text-white/60 uppercase hover:text-white cursor-pointer transition-colors"
                 >
-                  {t("home.today")}
+                  TASKS DE HOJE
                 </h3>
                 <button
                   onClick={() => setActiveTab("calendar")}
@@ -845,7 +924,7 @@ export default function CommandCenter({
                   style={{ color: currentAccent.hex }}
                 >
                   <Calendar size={11} />
-                  <span>3 {t("home.scheduled")}</span>
+                  <span>{todayTasks.length} {todayTasks.length === 1 ? "tarefa" : "tarefas"}</span>
                 </button>
               </div>
               
@@ -872,18 +951,23 @@ export default function CommandCenter({
                         {task.title}
                       </span>
                       <div className="flex items-center gap-2 text-[10px] font-mono text-white/30">
-                        <span style={{ color: currentAccent.hex }}>{task.time}</span>
+                        <span style={{ color: currentAccent.hex }}>{task.dueTime || "SEM HORA"}</span>
                         <span>•</span>
-                        <span>{task.meta}</span>
+                        <span>{task.clientName || task.assignee.name || "Google Tasks"}</span>
                       </div>
                     </div>
                   </div>
                 ))}
+                {todayTasks.length === 0 && (
+                  <button onClick={() => setActiveTab("calendar")} className="rounded-sm border border-white/5 bg-white/[0.01] px-3 py-5 text-left text-[11px] text-white/35 hover:border-white/10 hover:text-white/55">
+                    Nenhuma tarefa para hoje.
+                  </button>
+                )}
               </div>
-            </motion.div>}
+            </motion.div>
 
             {/* Upcoming Event Module */}
-            {isModuleVisible("meetings") && <motion.div 
+            <motion.div
               custom={5}
               initial="hidden"
               animate={systemBooted ? "visible" : "hidden"}
@@ -897,22 +981,23 @@ export default function CommandCenter({
               
               <div 
                 onClick={() => {
-                  setSelectedMeetingId("evt-1");
+                  if (nextMeeting) setSelectedMeetingId(nextMeeting.id);
                   setActiveTab("calendar");
                 }}
                 className="group relative p-3.5 bg-white/[0.01] hover:bg-white/[0.02] border border-white/5 hover:border-brand-accent/20 rounded-sm transition-all duration-500 flex flex-col gap-2.5 cursor-pointer"
               >
+                {nextMeeting ? <>
                 <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: currentAccent.hex }}>
                   <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: currentAccent.hex, boxShadow: `0 0 8px ${currentAccent.glow}` }} />
-                  <span>{MOCK_UPCOMING.timeText.toUpperCase()}</span>
+                  <span>{formatMeetingDate(nextMeeting.date, nextMeeting.startTime)}</span>
                 </div>
                 
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] font-mono tracking-wider text-white/40 uppercase">
-                    {MOCK_UPCOMING.project}
+                    {nextMeeting.clientName || "AXION OFFICE"}
                   </span>
                   <span className="text-xs font-sans font-bold text-white group-hover:text-brand-accent transition-colors duration-300">
-                    {MOCK_UPCOMING.title}
+                    {nextMeeting.title}
                   </span>
                 </div>
                 
@@ -920,76 +1005,14 @@ export default function CommandCenter({
                   <span>{t("home.openMeeting")}</span>
                   <ArrowRight size={10} className="transform group-hover:translate-x-1 transition-transform" />
                 </span>
+                </> : <div className="flex items-center gap-2 py-3 text-xs text-white/35"><Calendar size={14} /><span>Nenhuma reunião pendente.</span></div>}
               </div>
-            </motion.div>}
+            </motion.div>
 
           </motion.div>
           )}
 
         </div>
-
-        {/* ==================== BOTTOM ROW (ACTIVITY & AIVA) ==================== */}
-        {showBottomRow && <motion.div
-          layout
-          className="flex flex-col md:flex-row justify-between items-end gap-5 border-t border-white/5 pt-5 relative z-10"
-        >
-          
-          {/* Bottom-Left: Activity Logs */}
-          {isModuleVisible("recent-activity") && <motion.div 
-            custom={6}
-            initial="hidden"
-            animate={systemBooted ? "visible" : "hidden"}
-            variants={itemVariants}
-            className="w-full md:w-3/5 flex flex-col gap-3 text-left"
-          >
-            <div className="flex items-center gap-2.5">
-              <Activity size={12} className="text-white/30 animate-pulse" />
-              <h3 className="text-[10px] font-mono tracking-[0.2em] text-white/30 uppercase">{t("home.activity")}</h3>
-            </div>
-            
-            <div className="flex flex-col gap-2">
-              {MOCK_ACTIVITIES.slice(0, commandCenterConfig.recentItemsCount).map((log) => (
-                <div key={log.id} className="flex items-center gap-3 text-[10px] font-mono text-white/50 hover:text-white/80 transition-colors py-0.5">
-                  <span className="text-brand-accent/70 w-10">{log.timestamp}</span>
-                  <span className="text-white/20">•</span>
-                  <span className="text-white/40">{log.user.toUpperCase()}</span>
-                  <span className="text-white/20">—</span>
-                  <span className="text-white/60 truncate">{log.action}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>}
-
-          {(isModuleVisible("sales") || isModuleVisible("finance") || isModuleVisible("team-activity")) && (
-            <motion.div layout className="flex flex-1 flex-wrap gap-3">
-              {[
-                { id: "sales", label: t("home.sales"), value: "12", meta: t("home.activeOpportunities") },
-                { id: "finance", label: t("home.finance"), value: "€24.8K", meta: t("home.trackedMonth") },
-                { id: "team-activity", label: t("home.team"), value: "3", meta: t("home.partnersActive") },
-              ].filter((item) => isModuleVisible(item.id)).sort((a, b) => moduleOrder(a.id) - moduleOrder(b.id)).map((item) => (
-                <div key={item.id} className="min-w-[150px] flex-1 border border-white/5 bg-white/[0.015] rounded-sm px-3.5 py-3">
-                  <span className="text-[9px] font-mono tracking-[0.2em] text-white/30">{item.label}</span>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-lg font-light text-white/90">{item.value}</span>
-                    <span className="text-[9px] text-white/30">{item.meta}</span>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          )}
-
-          {/* Bottom-Right: AIVA daemon status module */}
-          {isModuleVisible("briefing") && <motion.div 
-            custom={7}
-            initial="hidden"
-            animate={systemBooted ? "visible" : "hidden"}
-            variants={itemVariants}
-            className="w-full md:w-auto self-end"
-          >
-            <AivaStatus isLight={isLight} onOpenAiva={() => setActiveTab("aiva")} />
-          </motion.div>}
-
-        </motion.div>}
 
           </motion.div>
         )}

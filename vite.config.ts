@@ -7,12 +7,19 @@ import { handleGoogleSheetsApi } from './src/server/googleSheetsApi';
 import { handleGoogleDriveApi } from './src/server/googleDriveApi';
 import { handleGoogleOAuthApi } from './src/server/googleOAuthApi';
 import { handleAuthApi } from './src/server/authApi';
+import { handleGoogleWorkspaceApi } from './src/server/googleWorkspaceApi';
+import { handleFinanceApi } from './src/server/financeApi';
+import { handleTeamActivityApi } from './src/server/teamActivityApi';
+import { handleNotificationApi } from './src/server/notificationApi';
+import { handleClientApi } from './src/server/clientApi';
+import { handleMeetingApi } from './src/server/meetingApi';
 
 export default defineConfig(({ mode }) => {
   const serverEnv = loadEnv(mode, process.cwd(), 'OPENAI_');
   const googleEnv = loadEnv(mode, process.cwd(), 'GOOGLE_');
   const axionEnv = loadEnv(mode, process.cwd(), 'AXION_');
-  Object.assign(process.env, serverEnv, googleEnv, axionEnv);
+  const supabaseEnv = loadEnv(mode, process.cwd(), 'SUPABASE_');
+  Object.assign(process.env, serverEnv, googleEnv, axionEnv, supabaseEnv);
   return {
     publicDir: 'assets',
     plugins: [
@@ -25,7 +32,13 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use((req, res, next) => void handleGoogleSheetsApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleGoogleDriveApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleGoogleOAuthApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleGoogleWorkspaceApi(req, res, next));
           server.middlewares.use((req, res, next) => void handleAuthApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleFinanceApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleTeamActivityApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleNotificationApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleClientApi(req, res, next));
+          server.middlewares.use((req, res, next) => void handleMeetingApi(req, res, next));
         },
       },
     ],

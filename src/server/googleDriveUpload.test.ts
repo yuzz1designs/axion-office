@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { uploadDriveDocument } from "./googleDriveUpload";
+import { deleteDriveDocument, uploadDriveDocument } from "./googleDriveUpload";
 
 test("upload usa token do utilizador e a pasta DOCS como parent", async () => {
   let authorization = "";
@@ -39,4 +39,20 @@ test("não declara sucesso quando o Drive rejeita o upload", async () => {
     file: Buffer.from("pdf-content"),
     fetchImpl: async () => new Response(JSON.stringify({ error: { message: "Forbidden" } }), { status: 403 }),
   }), /GOOGLE_DRIVE_UPLOAD_FAILED/);
+});
+
+test("elimina do Drive o ficheiro órfão usando supportsAllDrives", async () => {
+  let requestUrl = "";
+  let requestMethod = "";
+  await deleteDriveDocument({
+    accessToken: "token",
+    documentId: "drive-42",
+    fetchImpl: async (input, init) => {
+      requestUrl = String(input);
+      requestMethod = init?.method || "";
+      return new Response(null, { status: 204 });
+    },
+  });
+  assert.match(requestUrl, /\/files\/drive-42\?supportsAllDrives=true$/);
+  assert.equal(requestMethod, "DELETE");
 });

@@ -313,6 +313,13 @@ body[data-theme="light"] .axion-brand-title,
 }
 
 /* Welcome weather immersion */
+@media (hover: hover) and (pointer: fine) and (min-width: 768px) {
+  #welcome-screen-container,
+  #welcome-screen-container * {
+    cursor: none !important;
+  }
+}
+
 @keyframes welcomeAbstractDriftA {
   0%, 100% { transform: translate3d(-6%, -4%, 0) scale(1); }
   50% { transform: translate3d(10%, 8%, 0) scale(1.16); }

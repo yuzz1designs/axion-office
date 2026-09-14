@@ -7,3 +7,9 @@ coverage/
 !.env.example
 .DS_Store
 .axion-local/
+companion/bin/
+desktop-build/
+desktop-release/
+device-id
+app-registry.json
+supabase/.temp/

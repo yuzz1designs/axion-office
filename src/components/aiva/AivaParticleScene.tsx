@@ -2,257 +2,146 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { AudioLevelRef, AivaVisualState } from "./aivaVisual.types";
 import { getAivaStatePresets } from "./aivaStatePresets";
+import type { AivaBrainId } from "../../lib/aivaBrain";
 
-interface AivaParticleSceneProps {
-  state: AivaVisualState;
-  accentColor: string;
-  audioLevel: AudioLevelRef;
-  reducedMotion: boolean;
-}
+interface Props { state: AivaVisualState; accentColor: string; audioLevel: AudioLevelRef; reducedMotion: boolean; brain: AivaBrainId; executing: boolean; }
 
-function seededRandom(seed: number) {
-  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-  return value - Math.floor(value);
-}
-
-function createEntityGeometry(count: number) {
-  const positions = new Float32Array(count * 3);
-  const seeds = new Float32Array(count);
-  const sizes = new Float32Array(count);
-
-  for (let index = 0; index < count; index += 1) {
-    const r1 = seededRandom(index + 1);
-    const r2 = seededRandom(index + 73);
-    const r3 = seededRandom(index + 151);
-    const r4 = seededRandom(index + 281);
-    const theta = r1 * Math.PI * 2;
-    const vertical = (r2 * 2 - 1) * 1.62;
-    const waist = Math.pow(Math.max(0.08, 1 - Math.abs(vertical) / 1.85), 0.44);
-    const lobes = 0.72 + Math.sin(theta * 3 + vertical * 1.8) * 0.13 + Math.sin(theta * 7) * 0.05;
-    const shell = Math.pow(r3, 0.7);
-    const isWisp = r4 > 0.84;
-    const drift = isWisp ? 1.25 + Math.pow(r3, 2) * 1.25 : 1;
-
-    const x = Math.cos(theta) * waist * lobes * shell * drift + Math.sin(vertical * 2.2) * 0.18;
-    const z = Math.sin(theta) * waist * (0.58 + Math.cos(vertical * 2.7) * 0.09) * shell * drift;
-    const y = vertical + Math.sin(theta * 2) * 0.12 + (isWisp ? (r1 - 0.5) * 0.5 : 0);
-
-    positions[index * 3] = x;
-    positions[index * 3 + 1] = y;
-    positions[index * 3 + 2] = z;
-    seeds[index] = r4;
-    sizes[index] = isWisp ? 0.7 + r2 * 1.2 : 0.9 + r1 * 1.65;
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-  return geometry;
-}
-
-const vertexShader = /* glsl */ `
-  attribute float aSeed;
-  attribute float aSize;
-  uniform float uTime;
-  uniform float uMotion;
-  uniform float uTurbulence;
-  uniform float uConcentration;
-  uniform float uAudio;
-  uniform float uIdle;
-  uniform float uReduced;
-  uniform vec2 uPointer;
-  varying float vAlpha;
-  varying float vIdleShimmer;
-
+const shellVertex = /* glsl */ `
+  uniform float uTime; uniform float uActivity; uniform float uAudio; uniform vec2 uPointer;
+  varying vec3 vNormal; varying vec3 vWorld; varying float vFlow;
   void main() {
     vec3 p = position;
-    float activity = mix(1.0, 0.14, uReduced);
-    float breath = sin(uTime * 0.72 + aSeed * 14.0) * 0.035 * uMotion * activity;
-    float wave = sin(p.y * 3.1 + uTime * (1.0 + uTurbulence) + aSeed * 9.0);
-    float idleBreath = sin(uTime * 0.82) * 0.5 + 0.5;
-    float idleWave = sin(p.y * 4.2 - uTime * 1.35 + aSeed * 2.4) * 0.5 + 0.5;
-    float twist = (0.08 + uTurbulence * 0.22) * wave * activity;
-    float c = cos(twist);
-    float s = sin(twist);
-    p.xz = mat2(c, -s, s, c) * p.xz;
-    p += normalize(p + vec3(0.001)) * (breath + wave * uTurbulence * 0.055 * activity);
-    p += normalize(p + vec3(0.001)) * uIdle * idleBreath * 0.035 * activity;
-    p.x += uIdle * sin(uTime * 0.38 + p.y * 1.7 + aSeed * 5.0) * 0.026 * activity;
-    p.y += uIdle * sin(uTime * 0.46 + aSeed * 12.0) * 0.018 * activity;
-    p.x += sin(uTime * 1.7 + aSeed * 31.0) * uTurbulence * 0.028 * activity;
-    p *= uConcentration + uAudio * (0.08 + aSeed * 0.13);
-    p.xy += uPointer * vec2(0.08, 0.045) * (0.3 + aSeed) * activity;
-
-    vec4 viewPosition = modelViewMatrix * vec4(p, 1.0);
-    gl_Position = projectionMatrix * viewPosition;
-    gl_PointSize = aSize * (7.35 / -viewPosition.z) * (1.0 + uAudio * 1.4);
-    vAlpha = 0.42 + aSeed * 0.58;
-    vIdleShimmer = uIdle * pow(idleWave, 8.0) * (0.35 + aSeed * 0.65);
+    float flow = sin(p.y * 5.2 + p.x * 2.1 - uTime * 0.72) * sin(p.z * 4.1 - uTime * 0.41);
+    p += normal * flow * (0.026 + uActivity * 0.024 + uAudio * 0.05);
+    p.xy += uPointer * vec2(0.035, 0.02) * (0.4 + p.z * 0.25);
+    vec4 world = modelMatrix * vec4(p, 1.0);
+    vWorld = world.xyz; vNormal = normalize(mat3(modelMatrix) * normal); vFlow = flow;
+    gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
 
-const fragmentShader = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uGlow;
-  varying float vAlpha;
-  varying float vIdleShimmer;
-
+const shellFragment = /* glsl */ `
+  uniform vec3 uColor; uniform float uGlow; uniform float uTime; uniform float uAudio;
+  varying vec3 vNormal; varying vec3 vWorld; varying float vFlow;
   void main() {
-    float distanceToCenter = distance(gl_PointCoord, vec2(0.5));
-    float particle = smoothstep(0.5, 0.08, distanceToCenter);
-    float core = smoothstep(0.22, 0.0, distanceToCenter);
-    if (particle < 0.02) discard;
-    vec3 shimmerColor = mix(uColor, vec3(0.82, 0.96, 1.0), vIdleShimmer * 0.58);
-    float shimmerGlow = 1.0 + vIdleShimmer * 0.75;
-    gl_FragColor = vec4(shimmerColor + core * uGlow * 0.18, particle * vAlpha * min(1.0, uGlow) * shimmerGlow);
+    vec3 viewDir = normalize(cameraPosition - vWorld);
+    float fresnel = pow(1.0 - abs(dot(viewDir, normalize(vNormal))), 3.6);
+    float threads = pow(max(0.0, sin(vWorld.y * 8.0 + vWorld.x * 3.0 - uTime * 0.48) * 0.5 + 0.5), 9.0);
+    float lower = 1.0 - smoothstep(-1.25, 0.3, vWorld.y);
+    vec3 deep = mix(uColor, vec3(0.002, 0.006, 0.016), 0.72);
+    vec3 color = mix(deep, uColor, fresnel * 0.88 + lower * 0.25 + max(0.0, -vFlow) * 0.1);
+    color = mix(color, vec3(1.0), pow(fresnel, 6.0) * (0.12 + lower * 0.16));
+    float alpha = fresnel * (0.12 + uGlow * 0.14) + threads * fresnel * 0.1 + uAudio * fresnel * 0.16;
+    gl_FragColor = vec4(color * (0.72 + fresnel * 1.35 + uAudio * 0.45), alpha);
   }
 `;
 
-function createFilament(color: string, index: number) {
+function flowingCurve(index: number, lower = false) {
   const points: THREE.Vector3[] = [];
-  const radius = 1.05 + index * 0.23;
-  for (let step = 0; step <= 96; step += 1) {
-    const angle = (step / 96) * Math.PI * 2;
-    points.push(new THREE.Vector3(
-      Math.cos(angle) * radius,
-      Math.sin(angle * 2 + index) * 0.18,
-      Math.sin(angle) * radius * 0.38,
-    ));
+  const phase = index * 1.71;
+  for (let i = 0; i < 120; i += 1) {
+    const angle = i / 120 * Math.PI * 2;
+    const latitude = lower
+      ? -0.8 + Math.sin(angle + phase) * 0.12 + Math.sin(angle * 3 - phase) * 0.045
+      : Math.sin(angle * (1 + index % 2) + phase) * (0.34 + index * 0.035) + Math.sin(angle * 3.0 - phase) * 0.055;
+    const radius = Math.sqrt(Math.max(0.2, 1.82 - latitude * latitude)) * (1 + Math.sin(angle * 3 + phase) * 0.022);
+    points.push(new THREE.Vector3(Math.cos(angle) * radius, latitude, Math.sin(angle) * radius * (0.78 + index * 0.018)));
   }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending });
-  const line = new THREE.Line(geometry, material);
-  line.rotation.set(index * 0.52, index * 0.61, index * 0.37);
-  return line;
+  return new THREE.CatmullRomCurve3(points, true, "centripetal");
 }
 
-export default function AivaParticleScene({ state, accentColor, audioLevel, reducedMotion }: AivaParticleSceneProps) {
+function makeRibbon(index: number, color: THREE.Color, lower = false) {
+  const geometry = new THREE.TubeGeometry(flowingCurve(index, lower), 180, lower ? 0.009 + index * 0.002 : 0.006 + index * 0.001, 5, true);
+  const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: lower ? 0.45 : 0.12, blending: THREE.AdditiveBlending, depthWrite: false });
+  return new THREE.Mesh(geometry, material);
+}
+
+function createAuraTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const context = canvas.getContext("2d")!;
+  const gradient = context.createRadialGradient(128, 128, 5, 128, 128, 128);
+  gradient.addColorStop(0, "rgba(255,255,255,.18)"); gradient.addColorStop(0.42, "rgba(255,255,255,.07)"); gradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = gradient; context.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function createFlareTexture() {
+  const canvas = document.createElement("canvas"); canvas.width = canvas.height = 128;
+  const context = canvas.getContext("2d")!; const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, "rgba(255,255,255,1)"); gradient.addColorStop(0.08, "rgba(255,255,255,.82)"); gradient.addColorStop(0.28, "rgba(255,255,255,.35)"); gradient.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = gradient; context.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(canvas);
+}
+
+export default function AivaParticleScene({ state, accentColor, audioLevel, reducedMotion, brain, executing }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef(state);
   const accentRef = useRef(accentColor);
-
+  const brainRef = useRef(brain);
+  const executingRef = useRef(executing);
+  brainRef.current = brain; executingRef.current = executing;
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => { accentRef.current = accentColor; }, [accentColor]);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, reducedMotion ? 1 : 1.65));
-    renderer.setClearColor(0x000000, 0);
-    mount.appendChild(renderer.domElement);
-
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, reducedMotion ? 1 : 1.65));
+    renderer.setClearColor(0, 0); renderer.outputColorSpace = THREE.SRGBColorSpace; mount.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 30);
-    // Extra framing keeps peripheral fragments inside the canvas during
-    // expanded/speaking states, including on wide and short containers.
-    camera.position.set(0, 0, 8.35);
-    const group = new THREE.Group();
-    group.scale.set(1.28, 1.1, 1.24);
-    // The responsive grid already centres the WebGL field with the interaction
-    // bar. Only a small vertical optical correction is required.
-    group.position.set(0, 0.2, 0);
-    scene.add(group);
-
-    const geometry = createEntityGeometry(reducedMotion ? 2200 : 6200);
-    const uniforms = {
-      uTime: { value: 0 },
-      uMotion: { value: 0.45 },
-      uTurbulence: { value: 0.14 },
-      uConcentration: { value: 1 },
-      uAudio: { value: 0 },
-      uIdle: { value: 1 },
-      uReduced: { value: reducedMotion ? 1 : 0 },
-      uPointer: { value: new THREE.Vector2() },
-      uColor: { value: new THREE.Color(accentRef.current) },
-      uGlow: { value: 0.72 },
-    };
-    const material = new THREE.ShaderMaterial({
-      uniforms,
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const entity = new THREE.Points(geometry, material);
-    group.add(entity);
-
-    const filaments = [0, 1, 2].map((index) => createFilament(accentRef.current, index));
-    filaments.forEach((line) => group.add(line));
-
-    const pointerTarget = new THREE.Vector2();
-    const pointer = new THREE.Vector2();
-    const onPointerMove = (event: PointerEvent) => {
-      const bounds = mount.getBoundingClientRect();
-      pointerTarget.set(
-        ((event.clientX - bounds.left) / bounds.width - 0.5) * 2,
-        -((event.clientY - bounds.top) / bounds.height - 0.5) * 2,
-      );
-    };
-    const onPointerLeave = () => pointerTarget.set(0, 0);
-    mount.addEventListener("pointermove", onPointerMove);
-    mount.addEventListener("pointerleave", onPointerLeave);
-
-    const resize = () => {
-      const width = Math.max(1, mount.clientWidth);
-      const height = Math.max(1, mount.clientHeight);
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    };
-    const observer = new ResizeObserver(resize);
-    observer.observe(mount);
-    resize();
-
-    const clock = new THREE.Clock();
-    let frame = 0;
-    const animate = () => {
-      frame = requestAnimationFrame(animate);
-      if (document.hidden) return;
-      const elapsed = clock.getElapsedTime();
-      const preset = getAivaStatePresets(accentRef.current)[stateRef.current];
-      const ease = reducedMotion ? 0.035 : 0.055;
-      uniforms.uTime.value = elapsed;
-      uniforms.uMotion.value = THREE.MathUtils.lerp(uniforms.uMotion.value, preset.motion, ease);
-      uniforms.uTurbulence.value = THREE.MathUtils.lerp(uniforms.uTurbulence.value, preset.turbulence, ease);
-      uniforms.uConcentration.value = THREE.MathUtils.lerp(uniforms.uConcentration.value, preset.concentration, ease);
-      uniforms.uGlow.value = THREE.MathUtils.lerp(uniforms.uGlow.value, preset.glow, ease);
-      uniforms.uAudio.value = audioLevel.current;
-      uniforms.uIdle.value = THREE.MathUtils.lerp(uniforms.uIdle.value, stateRef.current === "idle" ? 1 : 0, ease);
-      uniforms.uColor.value.lerp(new THREE.Color(preset.color), ease);
-      pointer.lerp(pointerTarget, 0.04);
-      uniforms.uPointer.value.copy(pointer);
-      const idleDrift = stateRef.current === "idle" ? Math.sin(elapsed * 0.31) * 0.035 : 0;
-      group.rotation.y = Math.sin(elapsed * 0.19) * 0.16 + idleDrift + pointer.x * 0.1;
-      group.rotation.x = Math.cos(elapsed * 0.14) * 0.025 - pointer.y * 0.035;
-      filaments.forEach((line, index) => {
-        line.rotation.y += (0.00045 + index * 0.00018) * (reducedMotion ? 0.1 : 1);
-        const lineMaterial = line.material as THREE.LineBasicMaterial;
-        lineMaterial.color.lerp(new THREE.Color(preset.color), ease);
-        lineMaterial.opacity = 0.035 + preset.glow * 0.045 + audioLevel.current * 0.08;
-      });
-      renderer.render(scene, camera);
-    };
-    animate();
-
+    const camera = new THREE.PerspectiveCamera(37, 1, 0.1, 30); camera.position.z = 6.8;
+    const orb = new THREE.Group(); orb.scale.setScalar(1.05); scene.add(orb);
+    const uniforms = { uTime: { value: 0 }, uActivity: { value: 0.2 }, uAudio: { value: 0 }, uGlow: { value: 0.8 }, uPointer: { value: new THREE.Vector2() }, uColor: { value: new THREE.Color(accentColor) } };
+    const shellGeometry = new THREE.SphereGeometry(1.42, 128, 96);
+    const shellMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader: shellVertex, fragmentShader: shellFragment, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    orb.add(new THREE.Mesh(shellGeometry, shellMaterial));
+    const coreGeometry = new THREE.IcosahedronGeometry(0.58, 2);
+    const coreMaterial = new THREE.MeshBasicMaterial({ color: accentColor, wireframe: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial); orb.add(core);
+    const ringGeometry = new THREE.TorusGeometry(1.62, 0.005, 6, 128);
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: accentColor, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial); ring.rotation.x = 1.12; orb.add(ring);
+    const ribbons = Array.from({ length: 5 }, (_, index) => makeRibbon(index, new THREE.Color(accentColor)));
+    const lowerRibbons = [0, 1].map((index) => makeRibbon(index, new THREE.Color(accentColor), true));
+    ribbons.forEach((ribbon, index) => { ribbon.rotation.set(index * 0.08 - 0.22, index * 0.19, index * 0.055 - 0.18); orb.add(ribbon); });
+    lowerRibbons.forEach((ribbon, index) => { ribbon.rotation.set(0.03 + index * 0.025, index * 0.035 - 0.04, index * 0.018); orb.add(ribbon); });
+    const auraMaterial = new THREE.SpriteMaterial({ map: createAuraTexture(), color: new THREE.Color(accentColor), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
+    const aura = new THREE.Sprite(auraMaterial); aura.scale.set(4.35, 4.35, 1); aura.position.z = -0.7; scene.add(aura);
+    const flareMaterial = new THREE.SpriteMaterial({ map: createFlareTexture(), color: new THREE.Color(accentColor), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.72 });
+    const flare = new THREE.Sprite(flareMaterial); flare.scale.set(0.72, 0.5, 1); flare.position.set(-0.72, -0.89, 1.18); orb.add(flare);
+    const pointerTarget = new THREE.Vector2(); const pointer = new THREE.Vector2();
+    const move = (event: PointerEvent) => { const b = mount.getBoundingClientRect(); pointerTarget.set((event.clientX - b.left) / b.width * 2 - 1, -((event.clientY - b.top) / b.height * 2 - 1)); };
+    const leave = () => pointerTarget.set(0, 0);
+    mount.addEventListener("pointermove", move); mount.addEventListener("pointerleave", leave);
+    const resize = () => { const w = Math.max(1, mount.clientWidth); const h = Math.max(1, mount.clientHeight); renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+    const observer = new ResizeObserver(resize); observer.observe(mount); resize();
+    const clock = new THREE.Clock(); let frame = 0; let coreMix = 0;
+    const render = () => {
+      frame = requestAnimationFrame(render); if (document.hidden) return;
+      const time = clock.getElapsedTime(); const preset = getAivaStatePresets(accentRef.current)[stateRef.current]; const ease = reducedMotion ? 0.03 : 0.055;
+      const activeColor = new THREE.Color(accentRef.current);
+      coreMix = THREE.MathUtils.lerp(coreMix, brainRef.current === "mark-ii" ? 1 : 0, reducedMotion ? 1 : 0.045);
+      coreMaterial.color.lerp(activeColor, ease); ringMaterial.color.lerp(activeColor, ease);
+      coreMaterial.opacity = coreMix * (executingRef.current ? 0.24 : 0.12);
+      ringMaterial.opacity = coreMix * 0.2;
+      if (!reducedMotion) { core.rotation.y = time * (executingRef.current ? 0.35 : 0.12); core.rotation.z = Math.sin(time * 0.15) * 0.3; ring.rotation.z = time * 0.08; }
+      uniforms.uTime.value = time; uniforms.uActivity.value = THREE.MathUtils.lerp(uniforms.uActivity.value, preset.turbulence, ease); uniforms.uAudio.value = audioLevel.current; uniforms.uGlow.value = THREE.MathUtils.lerp(uniforms.uGlow.value, preset.glow, ease); uniforms.uColor.value.lerp(activeColor, ease);
+      pointer.lerp(pointerTarget, 0.035); uniforms.uPointer.value.copy(pointer);
+      orb.rotation.y = Math.sin(time * 0.16) * 0.14 + pointer.x * 0.13; orb.rotation.x = Math.cos(time * 0.13) * 0.045 - pointer.y * 0.08;
+      const pulse = reducedMotion ? 1 : 1 + Math.sin(time * 0.72) * 0.012 + audioLevel.current * 0.045; orb.scale.setScalar((1.05 + coreMix * 0.035) * pulse);
+      ribbons.forEach((ribbon, index) => { ribbon.rotation.y += (0.0002 + index * 0.00004) * (reducedMotion ? 0.1 : 1); const material = ribbon.material as THREE.MeshBasicMaterial; material.color.lerp(activeColor, ease); material.opacity = 0.018 + preset.glow * 0.024 + audioLevel.current * 0.05; });
+      lowerRibbons.forEach((ribbon, index) => { ribbon.position.y = Math.sin(time * 0.22 + index) * 0.018; const material = ribbon.material as THREE.MeshBasicMaterial; material.color.lerp(activeColor, ease); material.opacity = (index === 1 ? 0.16 : 0.1) + preset.glow * 0.08 + audioLevel.current * 0.14; });
+      auraMaterial.color.lerp(activeColor, ease); flareMaterial.color.lerp(activeColor, ease);
+      flareMaterial.opacity = 0.48 + Math.sin(time * 1.05) * 0.1 + audioLevel.current * 0.28;
+      auraMaterial.opacity = 0.1 + preset.glow * 0.045 + audioLevel.current * 0.06; renderer.render(scene, camera);
+    }; render();
     return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      mount.removeEventListener("pointermove", onPointerMove);
-      mount.removeEventListener("pointerleave", onPointerLeave);
-      geometry.dispose();
-      material.dispose();
-      filaments.forEach((line) => {
-        line.geometry.dispose();
-        (line.material as THREE.Material).dispose();
-      });
-      renderer.dispose();
-      renderer.domElement.remove();
+      cancelAnimationFrame(frame); observer.disconnect(); mount.removeEventListener("pointermove", move); mount.removeEventListener("pointerleave", leave);
+      shellGeometry.dispose(); shellMaterial.dispose(); [...ribbons, ...lowerRibbons].forEach((ribbon) => { ribbon.geometry.dispose(); (ribbon.material as THREE.Material).dispose(); });
+      coreGeometry.dispose(); coreMaterial.dispose(); ringGeometry.dispose(); ringMaterial.dispose();
+      auraMaterial.map?.dispose(); auraMaterial.dispose(); flareMaterial.map?.dispose(); flareMaterial.dispose(); renderer.dispose(); renderer.domElement.remove();
     };
   }, [audioLevel, reducedMotion]);
-
   return <div ref={mountRef} className="absolute inset-0" aria-hidden="true" />;
 }

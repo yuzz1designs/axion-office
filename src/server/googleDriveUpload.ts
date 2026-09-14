@@ -9,6 +9,12 @@ interface DriveUploadInput {
   fetchImpl?: typeof fetch;
 }
 
+interface DriveDeleteInput {
+  accessToken: string;
+  documentId: string;
+  fetchImpl?: typeof fetch;
+}
+
 export async function uploadDriveDocument({ accessToken, folderId, fileName, mimeType, file, fetchImpl = fetch }: DriveUploadInput): Promise<DriveDocument> {
   const boundary = `axion-office-${Date.now().toString(16)}`;
   const body = Buffer.concat([
@@ -31,4 +37,12 @@ export async function uploadDriveDocument({ accessToken, folderId, fileName, mim
   const result = await response.json() as DriveFile & { error?: { message?: string } };
   if (!response.ok || !result.id) throw new Error("GOOGLE_DRIVE_UPLOAD_FAILED");
   return mapDriveFile(result);
+}
+
+export async function deleteDriveDocument({ accessToken, documentId, fetchImpl = fetch }: DriveDeleteInput) {
+  const response = await fetchImpl(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}?supportsAllDrives=true`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) throw new Error("GOOGLE_DRIVE_DELETE_FAILED");
 }

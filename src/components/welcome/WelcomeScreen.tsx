@@ -249,7 +249,7 @@ export default function WelcomeScreen({ onEnter }: WelcomeScreenProps) {
   return (
     <div 
       id="welcome-screen-container" 
-      className="relative w-screen h-screen overflow-hidden bg-slate-950 flex flex-col justify-between items-center py-12 px-6 z-50 select-none transition-all duration-1000 font-sans cursor-none"
+      className="relative w-screen h-screen overflow-hidden bg-slate-950 flex flex-col justify-between items-center py-12 px-6 z-50 select-none transition-all duration-1000 font-sans"
     >
       {/* Dynamic Weather Background Layer */}
       <div className="absolute inset-0 w-full h-full z-0 overflow-hidden bg-[#050609]">

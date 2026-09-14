@@ -4,6 +4,10 @@ import { readFileSync } from "node:fs";
 import { decodeUploadFileName, mapDriveFile, MAX_DRIVE_UPLOAD_BYTES, validateDriveUpload, type DriveFile } from "./driveDocument";
 import { uploadDriveDocument } from "./googleDriveUpload";
 import { getGoogleOAuthClient, getGoogleOAuthStore } from "./googleOAuthApi";
+import { authenticateSupabaseUser, readSessionToken } from "./supabaseAuth";
+import { getSupabaseBackend } from "./supabaseBackend";
+import { getAllowedEmails } from "./supabaseConfig";
+import { recordTeamActivity } from "./teamActivityStore";
 
 const DOCS_FOLDER_ID = process.env.GOOGLE_DRIVE_DOCS_FOLDER_ID || "1_Xtah1WKj_YoxZoOjNABiM0TjuWBvef8";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -89,7 +93,7 @@ async function listDocuments() {
   return (result.files || []).map(mapDriveFile);
 }
 
-async function uploadDocument(req: IncomingMessage) {
+export async function uploadDocumentToDocs(req: IncomingMessage) {
   const fileName = decodeUploadFileName(typeof req.headers["x-file-name"] === "string" ? req.headers["x-file-name"] : undefined);
   const mimeType = String(req.headers["content-type"] || "application/octet-stream").split(";")[0];
   const file = await readBody(req, MAX_DRIVE_UPLOAD_BYTES);
@@ -101,7 +105,8 @@ async function uploadDocument(req: IncomingMessage) {
   if (!grant || !client) throw new Error("GOOGLE_DRIVE_OAUTH_REQUIRED");
   try {
     const accessToken = await client.refreshAccessToken(grant.refreshToken);
-    return await uploadDriveDocument({ accessToken, folderId: DOCS_FOLDER_ID, fileName, mimeType, file });
+    const document = await uploadDriveDocument({ accessToken, folderId: DOCS_FOLDER_ID, fileName, mimeType, file });
+    return { document, accessToken };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("GOOGLE_OAUTH_TOKEN_FAILED")) {
       store.clear();
@@ -116,6 +121,10 @@ export async function handleGoogleDriveApi(req: IncomingMessage, res: ServerResp
   if (!url.pathname.startsWith("/api/documents")) return next();
 
   try {
+    const backend = getSupabaseBackend();
+    if (!backend) return sendJson(res, 503, { error: "Supabase ainda não está configurado." });
+    const user = await authenticateSupabaseUser(readSessionToken(req.headers.cookie), backend.client.auth, getAllowedEmails());
+    if (!user) return sendJson(res, 401, { error: "Inicia sessão com uma conta AXION autorizada." });
     if (url.pathname === "/api/documents" && req.method === "GET") {
       const documents = await listDocuments();
       return sendJson(res, 200, {
@@ -126,7 +135,8 @@ export async function handleGoogleDriveApi(req: IncomingMessage, res: ServerResp
       });
     }
     if (url.pathname === "/api/documents/upload" && req.method === "POST") {
-      const document = await uploadDocument(req);
+      const { document } = await uploadDocumentToDocs(req);
+      await recordTeamActivity(backend.client, user.id, "document.uploaded", "document", document.id, { name: document.name });
       return sendJson(res, 201, { document });
     }
     return sendJson(res, 404, { error: "Endpoint de documentos não encontrado." });

@@ -60,7 +60,7 @@ export default function MeetingInviteBanner({
                   className="text-[10px] font-mono font-bold tracking-widest uppercase"
                   style={{ color: accentColor.hex }}
                 >
-                  NOVA REUNIÃO AGENDADA PELA LIDERANÇA
+                  REUNIÃO AGENDADA
                 </span>
                 <span className="text-white/20">•</span>
                 <span className="text-[10px] font-mono text-white/40">{invite.timestamp}</span>
@@ -104,7 +104,7 @@ export default function MeetingInviteBanner({
               onClick={() => onDismiss(invite.id)}
               className="px-3 py-1.5 text-xs font-sans text-white/40 hover:text-white transition-colors cursor-pointer"
             >
-              Dispensar
+              Ocultar aviso
             </button>
 
             <button

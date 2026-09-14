@@ -26,6 +26,8 @@ export interface CalendarEvent {
   discordChannelTarget?: string;
   gcalSynced: boolean;
   gcalEventId: string;
+  updatedAt?: string;
+  editable?: boolean;
 }
 
 export interface IntegratedTask {
@@ -46,6 +48,10 @@ export interface IntegratedTask {
   estimatedTime?: string;
   syncedWithGCal: boolean;
   fromDiscordAta: boolean;
+  notes?: string;
+  estimatedMinutes?: number;
+  googleTaskId?: string;
+  updatedAt?: string;
 }
 
 export interface MeetingAta {
